@@ -31,6 +31,7 @@ import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.cxf.CXFTestSupport;
+import org.apache.camel.component.cxf.TestHelper;
 import org.apache.camel.cxf.mtom_feature.Hello;
 import org.apache.camel.cxf.mtom_feature.HelloService;
 import org.apache.camel.test.junit4.CamelTestSupport;
@@ -95,12 +96,15 @@ public class CxfMtomConsumerTest extends CamelTestSupport {
     
     @Test
     public void testInvokingService() throws Exception {        
-       
-        if (Boolean.getBoolean("java.awt.headless")) {
-            System.out.println("Running headless. Skipping test as Images may not work.");
+        if (MtomTestHelper.isAwtHeadless(null, log)) {
             return;
-        }        
-        
+        }
+
+        // skip test on aix
+        if (TestHelper.isPlatform("aix")) {
+            return;
+        }
+
         Holder<byte[]> photo = new Holder<byte[]>("RequestFromCXF".getBytes("UTF-8"));
         Holder<Image> image = new Holder<Image>(getImage("/java.jpg"));
 

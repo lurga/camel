@@ -23,14 +23,12 @@ import java.util.List;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
-import org.jsmpp.bean.Alphabet;
 import org.jsmpp.bean.DataCoding;
 import org.jsmpp.bean.ESMClass;
 import org.jsmpp.bean.GSMSpecificFeature;
 import org.jsmpp.bean.MessageMode;
 import org.jsmpp.bean.MessageType;
 import org.jsmpp.bean.NumberingPlanIndicator;
-import org.jsmpp.bean.OptionalParameter;
 import org.jsmpp.bean.RegisteredDelivery;
 import org.jsmpp.bean.SubmitSm;
 import org.jsmpp.bean.TypeOfNumber;
@@ -50,7 +48,9 @@ public class SmppSubmitSmCommand extends SmppSmCommand {
         for (int i = 0; i < submitSms.length; i++) {
             SubmitSm submitSm = submitSms[i];
             String messageID;
-            log.debug("Sending short message {} for exchange id '{}'...", i, exchange.getExchangeId());
+            if (log.isDebugEnabled()) {
+                log.debug("Sending short message {} for exchange id '{}'...", i, exchange.getExchangeId());
+            }
             
             try {
                 messageID = session.submitShortMessage(
@@ -79,8 +79,10 @@ public class SmppSubmitSmCommand extends SmppSmCommand {
             messageIDs.add(messageID);
         }
 
-        log.debug("Sent short message for exchange id '{}' and received message ids '{}'",
-                exchange.getExchangeId(), messageIDs);
+        if (log.isDebugEnabled()) {
+            log.debug("Sent short message for exchange id '{}' and received message ids '{}'",
+                    exchange.getExchangeId(), messageIDs);
+        }
 
         Message message = getResponseMessage(exchange);
         message.setHeader(SmppConstants.ID, messageIDs);
@@ -88,15 +90,10 @@ public class SmppSubmitSmCommand extends SmppSmCommand {
     }
 
     protected SubmitSm[] createSubmitSm(Exchange exchange) {
-        String body = exchange.getIn().getBody(String.class);
+        byte[] shortMessage = getShortMessage(exchange.getIn());
 
-        byte providedAlphabet = getProvidedAlphabet(exchange);
-        Alphabet determinedAlphabet = determineAlphabet(exchange);
-        Charset charset = determineCharset(providedAlphabet, determinedAlphabet.value());
-        byte[] shortMessage = body.getBytes(charset);
-        
         SubmitSm template = createSubmitSmTemplate(exchange);
-        SmppSplitter splitter = createSplitter(exchange);
+        SmppSplitter splitter = createSplitter(exchange.getIn());
         byte[][] segments = splitter.split(shortMessage);
 
         // multipart message
@@ -120,6 +117,8 @@ public class SmppSubmitSmCommand extends SmppSmCommand {
 
         if (in.getHeaders().containsKey(SmppConstants.DATA_CODING)) {
             submitSm.setDataCoding(in.getHeader(SmppConstants.DATA_CODING, Byte.class));
+        } else if (in.getHeaders().containsKey(SmppConstants.ALPHABET)) {
+            submitSm.setDataCoding(in.getHeader(SmppConstants.ALPHABET, Byte.class));
         } else {
             submitSm.setDataCoding(config.getDataCoding());
         }
@@ -205,7 +204,7 @@ public class SmppSubmitSmCommand extends SmppSmCommand {
         
         submitSm.setEsmClass(new ESMClass().value());
         
-        submitSm.setOptionalParametes(new OptionalParameter[0]);
+        submitSm.setOptionalParametes();
 
         return submitSm;
     }

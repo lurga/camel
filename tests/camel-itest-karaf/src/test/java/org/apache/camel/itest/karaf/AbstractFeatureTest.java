@@ -40,10 +40,9 @@ import static org.ops4j.pax.exam.CoreOptions.maven;
 import static org.ops4j.pax.exam.CoreOptions.mavenBundle;
 import static org.ops4j.pax.exam.CoreOptions.scanFeatures;
 
-
 public abstract class AbstractFeatureTest {
 
-    protected final transient Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(AbstractFeatureTest.class);
 
     @Inject
     protected BundleContext bundleContext;
@@ -115,7 +114,7 @@ public abstract class AbstractFeatureTest {
     protected CamelContext createCamelContext() throws Exception {
         CamelContextFactory factory = new CamelContextFactory();
         factory.setBundleContext(bundleContext);
-        log.info("Get the bundleContext is " + bundleContext);
+        LOG.info("Get the bundleContext is " + bundleContext);
         return factory.createContext();
     }
 
@@ -143,7 +142,7 @@ public abstract class AbstractFeatureTest {
     
     public static UrlReference getKarafFeatureUrl() {
         String karafVersion = System.getProperty("karafVersion");
-        System.out.println("*** The karaf version is " + karafVersion + " ***");
+        LOG.info("*** The karaf version is " + karafVersion + " ***");
 
         String type = "xml/features";
         return mavenBundle().groupId("org.apache.karaf.assemblies.features").
@@ -155,13 +154,14 @@ public abstract class AbstractFeatureTest {
             new Option[]{
                 karafDistributionConfiguration().frameworkUrl(
                     maven().groupId("org.apache.karaf").artifactId("apache-karaf").type("tar.gz").versionAsInProject())
-                    //This version doesn't affect the verison of karaf we use 
-                    .karafVersion("2.2.7").name("Apache Karaf")
+                    //This version doesn't affect the version of karaf we use 
+                    .karafVersion("2.3.0").name("Apache Karaf")
                     .unpackDirectory(new File("target/paxexam/unpack/")),
                 
                 KarafDistributionOption.keepRuntimeFolder(),
-                // override the jre.properties
-                replaceConfigurationFile("etc/jre.properties", new File("src/test/resources/org/apache/camel/itest/karaf/jre.properties")),
+                // override the config.properties (to fix pax-exam bug)
+                replaceConfigurationFile("etc/config.properties", new File("src/test/resources/org/apache/camel/itest/karaf/config.properties")),
+                replaceConfigurationFile("etc/custom.properties", new File("src/test/resources/org/apache/camel/itest/karaf/custom.properties")),
                 // install the cxf jaxb spec as the karaf doesn't provide it by default
                 scanFeatures(getCamelKarafFeatureUrl(), "cxf-jaxb", "camel-core", "camel-spring", "camel-" + feature)};
 

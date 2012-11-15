@@ -38,7 +38,8 @@ import org.slf4j.LoggerFactory;
  * Client handler which cannot be shared
  */
 public class ClientChannelHandler extends SimpleChannelUpstreamHandler {
-    private static final transient Logger LOG = LoggerFactory.getLogger(ClientChannelHandler.class);
+    // use NettyProducer as logger to make it easier to read the logs as this is part of the producer
+    private static final transient Logger LOG = LoggerFactory.getLogger(NettyProducer.class);
     private final NettyProducer producer;
     private volatile boolean messageReceived;
     private volatile boolean exceptionHandled;
@@ -117,7 +118,9 @@ public class ClientChannelHandler extends SimpleChannelUpstreamHandler {
         AsyncCallback callback = getAsyncCallback(ctx);
 
         Object body = messageEvent.getMessage();
-        LOG.debug("Message received: {}", body);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Channel: {} received body: {}", new Object[]{messageEvent.getChannel(), body});
+        }
 
         // if textline enabled then covert to a String which must be used for textline
         if (producer.getConfiguration().isTextline()) {
@@ -152,8 +155,8 @@ public class ClientChannelHandler extends SimpleChannelUpstreamHandler {
                 disconnect = close;
             }
             if (disconnect) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Closing channel when complete at address: {}", producer.getConfiguration().getAddress());
+                if (LOG.isTraceEnabled()) {
+                    LOG.trace("Closing channel when complete at address: {}", producer.getConfiguration().getAddress());
                 }
                 NettyHelper.close(ctx.getChannel());
             }

@@ -24,23 +24,37 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
+import org.apache.camel.builder.NotifyBuilder;
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.util.StopWatch;
+import org.junit.Ignore;
+import org.junit.Test;
 
 public class NettyConcurrentTest extends BaseNettyTest {
 
+    @Test
     public void testNoConcurrentProducers() throws Exception {
         doSendMessages(1, 1);
     }
 
-    public void testConcurrentProducers() throws Exception {
+    @Test
+    public void testSmallConcurrentProducers() throws Exception {
         doSendMessages(10, 5);
     }
 
+    @Test
+    @Ignore
+    public void testLargeConcurrentProducers() throws Exception {
+        doSendMessages(250000, 100);
+    }
+
     private void doSendMessages(int files, int poolSize) throws Exception {
-        getMockEndpoint("mock:result").expectedMessageCount(files);
+        StopWatch watch = new StopWatch();
+        NotifyBuilder notify = new NotifyBuilder(context).whenDone(files).create();
 
         ExecutorService executor = Executors.newFixedThreadPool(poolSize);
         Map<Integer, Future<String>> responses = new ConcurrentHashMap<Integer, Future<String>>();
@@ -48,13 +62,17 @@ public class NettyConcurrentTest extends BaseNettyTest {
             final int index = i;
             Future<String> out = executor.submit(new Callable<String>() {
                 public String call() throws Exception {
-                    return template.requestBody("netty:tcp://localhost:{{port}}", index, String.class);
+                    String reply = template.requestBody("netty:tcp://localhost:{{port}}", index, String.class);
+                    log.debug("Sent {} received {}", index, reply);
+                    assertEquals("Bye " + index, reply);
+                    return reply;
                 }
             });
             responses.put(index, out);
         }
 
-        assertMockEndpointsSatisfied();
+        notify.matches(2, TimeUnit.MINUTES);
+        log.info("Took " + watch.taken() + " millis to process " + files + " messages using " + poolSize + " client threads.");
         assertEquals(files, responses.size());
 
         // get all responses
@@ -77,7 +95,7 @@ public class NettyConcurrentTest extends BaseNettyTest {
                         String body = exchange.getIn().getBody(String.class);
                         exchange.getOut().setBody("Bye " + body);
                     }
-                }).to("mock:result");
+                }).to("log:progress?groupSize=1000");
             }
         };
     }

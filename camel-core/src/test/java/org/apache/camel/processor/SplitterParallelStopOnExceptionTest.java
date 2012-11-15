@@ -16,7 +16,6 @@
  */
 package org.apache.camel.processor;
 
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -64,8 +63,7 @@ public class SplitterParallelStopOnExceptionTest extends ContextTestSupport {
             template.sendBody("direct:start", "Hello World,Goodday World,Kaboom,Bye World");
             fail("Should thrown an exception");
         } catch (CamelExecutionException e) {
-            ExecutionException ee = assertIsInstanceOf(ExecutionException.class, e.getCause());
-            CamelExchangeException cause = assertIsInstanceOf(CamelExchangeException.class, ee.getCause());
+            CamelExchangeException cause = assertIsInstanceOf(CamelExchangeException.class, e.getCause());
             assertTrue(cause.getMessage().startsWith("Parallel processing failed for number "));
             assertTrue(cause.getMessage().contains("Exchange[Message: Kaboom]"));
             assertEquals("Forced", cause.getCause().getMessage());

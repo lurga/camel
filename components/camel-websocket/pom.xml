@@ -36,6 +36,7 @@
         </camel.osgi.export.pkg>
         <camel.osgi.import.pkg>
             !org.apache.camel.component.websocket.*,
+            org.eclipse.jetty.util.ssl;version="[7.6,8.2)";resolution:=optional,
             ${camel.osgi.import.defaults},
             *
         </camel.osgi.import.pkg>
@@ -69,7 +70,8 @@
             <artifactId>jetty-jmx</artifactId>
             <version>${jetty-version}</version>
         </dependency>
-        <!-- Unit test -->
+        
+        <!-- test dependencies -->
         <dependency>
             <groupId>org.apache.camel</groupId>
             <artifactId>camel-test</artifactId>
@@ -89,10 +91,8 @@
             <groupId>com.ning</groupId>
             <artifactId>async-http-client</artifactId>
             <version>${ahc-version}</version>
-            <!--<version>1.8.0-SNAPSHOT</version> -->
           <scope>test</scope>
       </dependency>
-      <!-- logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>

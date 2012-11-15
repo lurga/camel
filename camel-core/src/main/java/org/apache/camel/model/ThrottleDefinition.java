@@ -27,7 +27,6 @@ import javax.xml.bind.annotation.XmlTransient;
 import org.apache.camel.Expression;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.ExpressionBuilder;
-import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.processor.Throttler;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.ObjectHelper;
@@ -139,7 +138,7 @@ public class ThrottleDefinition extends ExpressionNode implements ExecutorServic
      * @return the builder
      */
     public ThrottleDefinition maximumRequestsPerPeriod(Long maximumRequestsPerPeriod) {
-        setExpression(new ExpressionDefinition(ExpressionBuilder.constantExpression(maximumRequestsPerPeriod)));
+        setExpression(ExpressionNodeHelper.toExpressionDefinition(ExpressionBuilder.constantExpression(maximumRequestsPerPeriod)));
         return this;
     }
 

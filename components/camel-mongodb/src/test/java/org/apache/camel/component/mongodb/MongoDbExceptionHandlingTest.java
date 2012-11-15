@@ -16,12 +16,9 @@
  */
 package org.apache.camel.component.mongodb;
 
-import org.apache.camel.CamelContext;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.component.properties.PropertiesComponent;
-import org.apache.camel.spring.SpringCamelContext;
+
 import org.junit.Test;
-import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 public class MongoDbExceptionHandlingTest extends AbstractMongoDbTest {    
     
@@ -52,20 +49,11 @@ public class MongoDbExceptionHandlingTest extends AbstractMongoDbTest {
         }
        
     }
-
-    @Override
-    protected CamelContext createCamelContext() throws Exception {
-        applicationContext = new ClassPathXmlApplicationContext("org/apache/camel/component/mongodb/mongoComponentTest.xml");
-        return SpringCamelContext.springCamelContext(applicationContext);
-    }
     
     @Override
     protected RouteBuilder createRouteBuilder() throws Exception {
         return new RouteBuilder() {
             public void configure() {
-                
-                PropertiesComponent pc = new PropertiesComponent("classpath:mongodb.test.properties");
-                context.addComponent("properties", pc);
                 
                 from("direct:findAll")
                     .to("mongodb:myDb?database={{mongodb.testDb}}&collection={{mongodb.testCollection}}&operation=findAll&dynamicity=true")

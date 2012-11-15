@@ -18,9 +18,9 @@ package org.apache.camel.component.jclouds;
 
 import java.util.List;
 import java.util.Map;
-
 import org.apache.camel.Endpoint;
 import org.apache.camel.impl.DefaultComponent;
+import org.jclouds.Context;
 import org.jclouds.blobstore.BlobStore;
 import org.jclouds.compute.ComputeService;
 
@@ -48,7 +48,7 @@ public class JcloudsComponent extends DefaultComponent {
         if (JcloudsConstants.BLOBSTORE.endsWith(endpointType)) {
             if (uriParts.length >= 2) {
                 String provider = uriParts[1];
-                BlobStore blobStore = getBlobStoreForProvider(provider);
+                BlobStore blobStore = getBlobStore(provider);
                 endpoint = new JcloudsBlobStoreEndpoint(uri, this, blobStore);
             } else {
                 throw new Exception("Invalid Endpoint URI. It should contains a valid provider name");
@@ -56,7 +56,7 @@ public class JcloudsComponent extends DefaultComponent {
         } else if (JcloudsConstants.COMPUTE.endsWith(endpointType)) {
             if (uriParts.length >= 2) {
                 String provider = uriParts[1];
-                ComputeService computeService = getComputeServiceForProvider(provider);
+                ComputeService computeService = getComputeService(provider);
                 endpoint = new JcloudsComputeEndpoint(uri, this, computeService);
             } else {
                 throw new Exception("Invalid Endpoint URI. It should contains a valid provider name");
@@ -68,40 +68,74 @@ public class JcloudsComponent extends DefaultComponent {
     }
 
     /**
-     * Returns the {@link BlobStore} that matches the given provider.
-     * @param provider The provider id.
+     * Returns the {@link BlobStore} that matches the given providerOrApi.
+     * @param predicate The blobstore context name, provider or api.
      * @return The matching {@link BlobStore}
      */
-    protected BlobStore getBlobStoreForProvider(String provider) throws Exception {
-
+    protected BlobStore getBlobStore(String predicate) throws Exception {
         if (blobStores != null && !blobStores.isEmpty()) {
+
+            //First try using name and then fallback to the provider or api.
+            if (isNameSupportedByContext()) {
+                for (BlobStore blobStore : blobStores) {
+                    if (blobStore.getContext().unwrap().getName().equals(predicate)) {
+                        return blobStore;
+                    }
+                }
+            }
+
             for (BlobStore blobStore : blobStores) {
-                if (blobStore.getContext().getProviderSpecificContext().getId().equals(provider)) {
+                if (blobStore.getContext().unwrap().getId().equals(predicate)) {
                     return blobStore;
                 }
             }
-            throw new Exception(String.format("No blobstore found for provider:%s", provider));
+            throw new Exception(String.format("No blobstore found for:%s", predicate));
         } else {
             throw new Exception("No blobstore available.");
         }
     }
 
     /**
-     * Returns the {@link ComputeService} that matches the given provider.
-     * @param provider The provider id.
+     * Returns the {@link ComputeService} that matches the given predicate.
+     * @param predicate The compute context name, provider or api.
      * @return The matching {@link ComputeService}
      */
-    protected ComputeService getComputeServiceForProvider(String provider) throws Exception {
+    protected ComputeService getComputeService(String predicate) throws Exception {
 
         if (computeServices != null && !computeServices.isEmpty()) {
+            //First try using name and then fallback to the provider or api.
+            if (isNameSupportedByContext()) {
+                for (ComputeService computeService : computeServices) {
+                    if (computeService.getContext().unwrap().getName().equals(predicate)) {
+                        return computeService;
+                    }
+                }
+            }
+
             for (ComputeService computeService : computeServices) {
-                if (computeService.getContext().getProviderSpecificContext().getId().equals(provider)) {
+                if (computeService.getContext().unwrap().getId().equals(predicate)) {
                     return computeService;
                 }
             }
-            throw new Exception(String.format("No compute service found for provider:%s", provider));
+            throw new Exception(String.format("No compute service found for :%s", predicate));
         } else {
             throw new Exception("No compute service available.");
+        }
+    }
+
+    /**
+     * Checks if jclouds {@link Context} supports the name.
+     * We need this method as getName is not supported in earlier micro version of 1.5.x.
+     * So we use this check to fallback to traditional means of looking up contexts and services, if name is not present.
+     *
+     * @return
+     */
+    private boolean isNameSupportedByContext() {
+        try {
+            Context.class.getMethod("getName");
+            return true;
+        } catch (NoSuchMethodException ex) {
+            return false;
         }
     }
 

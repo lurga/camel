@@ -141,7 +141,7 @@ public class DefaultExecutorServiceManagerTest extends ContextTestSupport {
         custom.setPoolSize(10);
         custom.setMaxPoolSize(30);
         custom.setKeepAliveTime(50L);
-        custom.setMaxQueueSize(-1);
+        custom.setMaxQueueSize(Integer.MAX_VALUE);
 
         context.getExecutorServiceManager().setDefaultThreadPoolProfile(custom);
         assertEquals(true, custom.isDefaultProfile().booleanValue());
@@ -155,6 +155,30 @@ public class DefaultExecutorServiceManagerTest extends ContextTestSupport {
         assertEquals(30, executor.getMaximumPoolSize());
         assertEquals(50, executor.getKeepAliveTime(TimeUnit.SECONDS));
         assertEquals(Integer.MAX_VALUE, executor.getQueue().remainingCapacity());
+
+        context.stop();
+        assertEquals(true, myPool.isShutdown());
+    }
+
+    public void testDefaultNoMaxQueueThreadPool() throws Exception {
+        ThreadPoolProfile custom = new ThreadPoolProfile("custom");
+        custom.setPoolSize(10);
+        custom.setMaxPoolSize(30);
+        custom.setKeepAliveTime(50L);
+        custom.setMaxQueueSize(0);
+
+        context.getExecutorServiceManager().setDefaultThreadPoolProfile(custom);
+        assertEquals(true, custom.isDefaultProfile().booleanValue());
+
+        ExecutorService myPool = context.getExecutorServiceManager().newDefaultThreadPool(this, "myPool");
+        assertEquals(false, myPool.isShutdown());
+
+        // should use default settings
+        ThreadPoolExecutor executor = (ThreadPoolExecutor) myPool;
+        assertEquals(10, executor.getCorePoolSize());
+        assertEquals(30, executor.getMaximumPoolSize());
+        assertEquals(50, executor.getKeepAliveTime(TimeUnit.SECONDS));
+        assertEquals(0, executor.getQueue().remainingCapacity());
 
         context.stop();
         assertEquals(true, myPool.isShutdown());
@@ -455,6 +479,19 @@ public class DefaultExecutorServiceManagerTest extends ContextTestSupport {
         context.stop();
 
         assertTrue(tp.isShutdown());
+    }
+
+    public void testNewThread() throws Exception {
+        Thread thread = context.getExecutorServiceManager().newThread("Cool", new Runnable() {
+            @Override
+            public void run() {
+                // noop
+            }
+        });
+
+        assertNotNull(thread);
+        assertTrue(thread.isDaemon());
+        assertTrue(thread.getName().contains("Cool"));
     }
 
     // this is a manual test, by looking at the logs

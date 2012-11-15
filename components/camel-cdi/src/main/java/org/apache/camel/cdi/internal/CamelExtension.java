@@ -18,6 +18,7 @@ package org.apache.camel.cdi.internal;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -39,6 +40,7 @@ import javax.enterprise.inject.spi.ProcessAnnotatedType;
 import javax.enterprise.inject.spi.ProcessBean;
 import javax.enterprise.inject.spi.ProcessInjectionTarget;
 import javax.enterprise.inject.spi.ProcessProducerMethod;
+import javax.enterprise.util.AnnotationLiteral;
 import javax.inject.Inject;
 
 import org.apache.camel.CamelContext;
@@ -61,12 +63,13 @@ import org.apache.deltaspike.core.util.metadata.builder.AnnotatedTypeBuilder;
  * Set of camel specific hooks for CDI.
  */
 public class CamelExtension implements Extension {
+    private static class InjectLiteral extends AnnotationLiteral<Inject> implements Inject { }
 
     CamelContextMap camelContextMap;
 
-    private Set<Bean<?>> eagerBeans = new HashSet<Bean<?>>();
-    private Map<String, CamelContextConfig> camelContextConfigMap = new HashMap<String, CamelContextConfig>();
-    private List<CamelContextBean> camelContextBeans = new ArrayList<CamelContextBean>();
+    private final Set<Bean<?>> eagerBeans = new HashSet<Bean<?>>();
+    private final Map<String, CamelContextConfig> camelContextConfigMap = new HashMap<String, CamelContextConfig>();
+    private final List<CamelContextBean> camelContextBeans = new ArrayList<CamelContextBean>();
 
     public CamelExtension() {
     }
@@ -99,6 +102,21 @@ public class CamelExtension implements Extension {
                     .addToMethod(method, new InjectLiteral());
             process.setAnnotatedType(builder.create());
         }
+    }
+
+    protected <T> void detectRouteBuilders(@Observes ProcessAnnotatedType<T> process)
+        throws Exception {
+        AnnotatedType<T> annotatedType = process.getAnnotatedType();
+        ContextName annotation = annotatedType.getAnnotation(ContextName.class);
+        Class<T> javaClass = annotatedType.getJavaClass();
+        if (annotation != null && isRoutesBean(javaClass)) {
+            addRouteBuilderBean(process, annotation);
+        }
+    }
+
+    private void addRouteBuilderBean(final ProcessAnnotatedType<?> process, ContextName annotation) {
+        final CamelContextConfig config = getCamelConfig(annotation.value());
+        config.addRouteBuilderBean(process);
     }
 
     /**
@@ -169,13 +187,18 @@ public class CamelExtension implements Extension {
     private void addRouteBuilderBean(Bean<?> bean, ContextName annotation) {
         if (annotation != null) {
             String contextName = annotation.value();
-            CamelContextConfig config = camelContextConfigMap.get(contextName);
-            if (config == null) {
-                config = new CamelContextConfig();
-                camelContextConfigMap.put(contextName, config);
-            }
+            CamelContextConfig config = getCamelConfig(contextName);
             config.addRouteBuilderBean(bean);
         }
+    }
+
+    private CamelContextConfig getCamelConfig(final String contextName) {
+        CamelContextConfig config = camelContextConfigMap.get(contextName);
+        if (config == null) {
+            config = new CamelContextConfig();
+            camelContextConfigMap.put(contextName, config);
+        }
+        return config;
     }
 
     /**
@@ -317,6 +340,6 @@ public class CamelExtension implements Extension {
     }
 
     protected boolean isRoutesBean(Class<?> returnType) {
-        return RoutesBuilder.class.isAssignableFrom(returnType) || RouteContainer.class.isAssignableFrom(returnType);
+        return (RoutesBuilder.class.isAssignableFrom(returnType) || RouteContainer.class.isAssignableFrom(returnType)) && !Modifier.isAbstract(returnType.getModifiers());
     }
 }

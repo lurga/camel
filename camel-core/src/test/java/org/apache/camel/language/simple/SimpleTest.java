@@ -1086,6 +1086,39 @@ public class SimpleTest extends LanguageTestSupport {
         assertExpression("${body.substring(${header.min}, ${header.max})}", "me");
     }
 
+    public void testHeaderOgnlOnStringWithOgnlParams() throws Exception {
+        exchange.getIn().setBody(null);
+        exchange.getIn().setHeader("name", "Camel");
+        exchange.getIn().setHeader("max", 4);
+        exchange.getIn().setHeader("min", 2);
+
+        assertExpression("${header.name.substring(${header.min}, ${header.max})}", "me");
+    }
+
+    public void testCamelContextStartRoute() throws Exception {
+        exchange.getIn().setBody(null);
+
+        assertExpression("${camelContext.startRoute('foo')}", null);
+    }
+
+    public void testBodyOgnlReplace() throws Exception {
+        exchange.getIn().setBody("Kamel is a cool Kamel");
+
+        assertExpression("${body.replace(\"Kamel\", \"Camel\")}", "Camel is a cool Camel");
+    }
+
+    public void testBodyOgnlReplaceEscapedChar() throws Exception {
+        exchange.getIn().setBody("foo$bar$baz");
+
+        assertExpression("${body.replace('$', '-')}", "foo-bar-baz");
+    }
+
+    public void testBodyOgnlReplaceEscapedBackslashChar() throws Exception {
+        exchange.getIn().setBody("foo\\bar\\baz");
+
+        assertExpression("${body.replace('\\', '\\\\')}", "foo\\\\bar\\\\baz");
+    }
+
     public void testClassSimpleName() throws Exception {
         Animal tiger = new Animal("Tony the Tiger", 13);
         exchange.getIn().setBody(tiger);
@@ -1109,7 +1142,7 @@ public class SimpleTest extends LanguageTestSupport {
 
     public void testSlashBeforeHeader() throws Exception {
         assertExpression("foo/${header.foo}", "foo/abc");
-        assertExpression("foo\\\\${header.foo}", "foo\\abc");
+        assertExpression("foo\\${header.foo}", "foo\\abc");
     }
 
     public void testJSonLike() throws Exception {
@@ -1133,7 +1166,7 @@ public class SimpleTest extends LanguageTestSupport {
         exchange.getIn().setBody("Something");
 
         // slash foo
-        assertExpression("\\\\foo", "\\foo");
+        assertExpression("\\foo", "\\foo");
 
         assertExpression("\\n${body}", "\nSomething");
         assertExpression("\\t${body}", "\tSomething");
@@ -1144,9 +1177,12 @@ public class SimpleTest extends LanguageTestSupport {
         assertExpression("\\r${body}\\r", "\rSomething\r");
         assertExpression("\\n\\r${body}\\n\\r", "\n\rSomething\n\r");
 
-        assertExpression("\\$${body}", "$Something");
-        assertExpression("\\$\\{${body}\\}", "${Something}");
-        assertExpression("\\$\\{body\\}", "${body}");
+        assertExpression("$${body}", "$Something");
+    }
+
+    public void testCamelContextOGNL() throws Exception {
+        assertExpression("${camelContext.getName()}", context.getName());
+        assertExpression("${camelContext.version}", context.getVersion());
     }
 
     protected String getLanguageName() {
@@ -1154,15 +1190,12 @@ public class SimpleTest extends LanguageTestSupport {
     }
 
     protected void assertExpressionResultInstanceOf(String expressionText, Class<?> expectedType) {
-        // TODO [hz]: we should refactor TestSupport.assertExpression(Expression, Exchange, Object)
-        // into 2 methods, a helper that returns the value and use that helper in assertExpression
-        // Then use the helper here to get the value and move this method to LanguageTestSupport
         Language language = assertResolveLanguage(getLanguageName());
         Expression expression = language.createExpression(expressionText);
         assertNotNull("Cannot assert type when no type is provided", expectedType);
         assertNotNull("No Expression could be created for text: " + expressionText + " language: " + language, expression);
         Object answer = expression.evaluate(exchange, Object.class);
-        assertIsInstanceOf(Animal.class, answer);
+        assertIsInstanceOf(expectedType, answer);
     }
 
     public static final class Animal {

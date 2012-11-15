@@ -135,6 +135,8 @@ public class JmsConfiguration implements Cloneable {
     // the cacheLevelName of reply manager
     private String replyToCacheLevelName;
     private boolean allowNullBody = true;
+    private MessageListenerContainerFactory messageListenerContainerFactory;
+    private boolean includeSentJMSMessageID;
 
     public JmsConfiguration() {
     }
@@ -383,9 +385,18 @@ public class JmsConfiguration implements Cloneable {
             return new SimpleJmsMessageListenerContainer(endpoint);
         case Default:
             return new DefaultJmsMessageListenerContainer(endpoint);
+        case Custom:
+            return getCustomMessageListenerContainer(endpoint);            
         default:
             throw new IllegalArgumentException("Unknown consumer type: " + consumerType);
         }
+    }
+
+    private AbstractMessageListenerContainer getCustomMessageListenerContainer(JmsEndpoint endpoint) {
+        if (messageListenerContainerFactory != null) {
+            return messageListenerContainerFactory.createMessageListenerContainer(endpoint);
+        }
+        return null;
     }
 
     // Properties
@@ -1276,5 +1287,30 @@ public class JmsConfiguration implements Cloneable {
      */
     public void setAllowNullBody(boolean allowNullBody) {
         this.allowNullBody = allowNullBody;
+    }
+
+    public MessageListenerContainerFactory getMessageListenerContainerFactory() {
+        return messageListenerContainerFactory;
+    }
+
+    public void setMessageListenerContainerFactory(MessageListenerContainerFactory messageListenerContainerFactory) {
+        this.messageListenerContainerFactory = messageListenerContainerFactory;
+    }
+
+    public boolean isIncludeSentJMSMessageID() {
+        return includeSentJMSMessageID;
+    }
+
+    /**
+     * Whether to include the actual JMSMessageID set on the Message by the JMS vendor
+     * on the Camel Message as a header when sending InOnly messages.
+     * <p/>
+     * Can be enable to gather the actual JMSMessageID for InOnly messages, which allows to access
+     * the message id, which can be used for logging and tracing purposes.
+     * <p/>
+     * This option is default <tt>false</tt>.
+     */
+    public void setIncludeSentJMSMessageID(boolean includeSentJMSMessageID) {
+        this.includeSentJMSMessageID = includeSentJMSMessageID;
     }
 }

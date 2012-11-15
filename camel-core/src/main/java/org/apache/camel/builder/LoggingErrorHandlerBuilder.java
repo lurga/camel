@@ -19,6 +19,7 @@ package org.apache.camel.builder;
 import org.apache.camel.LoggingLevel;
 import org.apache.camel.Processor;
 import org.apache.camel.processor.LoggingErrorHandler;
+import org.apache.camel.processor.RedeliveryPolicy;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.CamelLogger;
 import org.slf4j.Logger;
@@ -49,10 +50,36 @@ public class LoggingErrorHandlerBuilder extends ErrorHandlerBuilderSupport {
         return false;
     }
 
+    @Override
+    public ErrorHandlerBuilder cloneBuilder() {
+        LoggingErrorHandlerBuilder answer = new LoggingErrorHandlerBuilder();
+        cloneBuilder(answer);
+        return answer;
+    }
+
+    protected void cloneBuilder(LoggingErrorHandlerBuilder other) {
+        super.cloneBuilder(other);
+
+        other.level = level;
+        other.log = log;
+    }
+
     public Processor createErrorHandler(final RouteContext routeContext, final Processor processor) {
         CamelLogger logger = new CamelLogger(log, level);
 
-        LoggingErrorHandler handler = new LoggingErrorHandler(routeContext.getCamelContext(), processor, logger, getExceptionPolicyStrategy());
+        // configure policy to use the selected logging level, and only log exhausted
+        RedeliveryPolicy policy = new RedeliveryPolicy();
+        policy.setLogExhausted(true);
+        policy.setRetriesExhaustedLogLevel(level);
+        policy.setLogStackTrace(true);
+        policy.setLogRetryAttempted(false);
+        policy.setRetryAttemptedLogLevel(LoggingLevel.OFF);
+        policy.setLogRetryStackTrace(false);
+        policy.setLogContinued(false);
+        policy.setLogHandled(false);
+
+        LoggingErrorHandler handler = new LoggingErrorHandler(routeContext.getCamelContext(), processor, logger,
+                policy, getExceptionPolicyStrategy());
         configure(routeContext, handler);
         return handler;
     }

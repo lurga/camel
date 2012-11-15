@@ -267,8 +267,8 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     }
 
     public boolean isMultipleConsumersSupported() {
-        // only allow multiple consumers for pub sub domain (e.g. topics)
-        return isPubSubDomain();
+        // JMS allows multiple consumers on both queues and topics
+        return true;
     }
 
     // Properties
@@ -1022,8 +1022,8 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     }
 
     @ManagedAttribute
-    public void setAsyncStopListener(boolean asyncStoptListener) {
-        configuration.setAsyncStopListener(asyncStoptListener);
+    public void setAsyncStopListener(boolean asyncStopListener) {
+        configuration.setAsyncStopListener(asyncStopListener);
     }
 
     @ManagedAttribute
@@ -1039,6 +1039,25 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     @ManagedAttribute
     public void setAllowNullBody(boolean allowNullBody) {
         configuration.setAllowNullBody(allowNullBody);
+    }
+    
+    @ManagedAttribute
+    public boolean isIncludeSentJMSMessageID() {
+        return configuration.isIncludeSentJMSMessageID();
+    }
+
+    @ManagedAttribute
+    public void setIncludeSentJMSMessageID(boolean includeSentJMSMessageID) {
+        configuration.setIncludeSentJMSMessageID(includeSentJMSMessageID);
+    }
+
+    public MessageListenerContainerFactory getMessageListenerContainerFactory() {
+        return configuration.getMessageListenerContainerFactory();
+    }
+
+    public void setMessageListenerContainerFactory(MessageListenerContainerFactory messageListenerContainerFactory) {
+        configuration.setMessageListenerContainerFactory(messageListenerContainerFactory);
+        configuration.setConsumerType(ConsumerType.Custom);
     }
 
     @ManagedAttribute

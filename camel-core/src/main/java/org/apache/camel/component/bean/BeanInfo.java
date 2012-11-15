@@ -52,8 +52,6 @@ import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.camel.util.ExchangeHelper.convertToType;
-
 /**
  * Represents the metadata about a bean type created via a combination of
  * introspection and annotations together with some useful sensible defaults
@@ -492,8 +490,18 @@ public class BeanInfo {
         possibleOperations.addAll(localOperationsWithCustomAnnotation);
 
         if (!possibleOperations.isEmpty()) {
-             // multiple possible operations so find the best suited if possible
+            // multiple possible operations so find the best suited if possible
             MethodInfo answer = chooseMethodWithMatchingBody(exchange, possibleOperations, localOperationsWithCustomAnnotation);
+
+            if (answer == null && name != null) {
+                // do we have hardcoded parameters values provided from the method name then fallback and try that
+                String parameters = ObjectHelper.between(name, "(", ")");
+                if (parameters != null) {
+                    // special as we have hardcoded parameters, so we need to choose method that matches those parameters the best
+                    answer = chooseMethodWithMatchingParameters(exchange, parameters, possibleOperations);
+                }
+            }
+
             if (answer == null) {
                 throw new AmbiguousMethodCallException(exchange, possibleOperations);
             } else {
@@ -504,7 +512,62 @@ public class BeanInfo {
         // not possible to determine
         return null;
     }
-    
+
+    private MethodInfo chooseMethodWithMatchingParameters(Exchange exchange, String parameters, Collection<MethodInfo> operationList)
+        throws AmbiguousMethodCallException {
+        // we have hardcoded parameters so need to match that with the given operations
+        Iterator<?> it = ObjectHelper.createIterator(parameters);
+        int count = 0;
+        while (it.hasNext()) {
+            it.next();
+            count++;
+        }
+
+        List<MethodInfo> operations = new ArrayList<MethodInfo>();
+        for (MethodInfo info : operationList) {
+            if (info.getParameters().size() == count) {
+                operations.add(info);
+            }
+        }
+
+        if (operations.isEmpty()) {
+            return null;
+        } else if (operations.size() == 1) {
+            return operations.get(0);
+        }
+
+        // okay we still got multiple operations, so need to match the best one
+        List<MethodInfo> candidates = new ArrayList<MethodInfo>();
+        for (MethodInfo info : operations) {
+            it = ObjectHelper.createIterator(parameters);
+            int index = 0;
+            boolean matches = true;
+            while (it.hasNext()) {
+                String parameter = (String) it.next();
+                Class<?> parameterType = BeanHelper.getValidParameterType(parameter);
+                Class<?> expectedType = info.getParameters().get(index).getType();
+
+                if (parameterType != null && expectedType != null) {
+                    if (!parameterType.isAssignableFrom(expectedType)) {
+                        matches = false;
+                        break;
+                    }
+                }
+
+                index++;
+            }
+
+            if (matches) {
+                candidates.add(info);
+            }
+        }
+
+        if (candidates.size() > 1) {
+            throw new AmbiguousMethodCallException(exchange, candidates);
+        }
+        return candidates.size() == 1 ? candidates.get(0) : null;
+    }
+
     private MethodInfo chooseMethodWithMatchingBody(Exchange exchange, Collection<MethodInfo> operationList,
                                                     List<MethodInfo> operationsWithCustomAnnotation)
         throws AmbiguousMethodCallException {
@@ -571,8 +634,9 @@ public class BeanInfo {
                 if (methodInfo.getBodyParameterType().isInstance(body)) {
                     return methodInfo;
                 }
-                
-                Object value = convertToType(exchange, methodInfo.getBodyParameterType(), body);
+
+                // we should only try to convert, as we are looking for best match
+                Object value = exchange.getContext().getTypeConverter().tryConvertTo(methodInfo.getBodyParameterType(), exchange, body);
                 if (value != null) {
                     if (LOG.isTraceEnabled()) {
                         LOG.trace("Converted body from: {} to: {}",

@@ -146,6 +146,15 @@ public interface ExecutorServiceManager extends ShutdownableService {
     long getShutdownAwaitTermination();
 
     /**
+     * Creates a new daemon thread with the given name.
+     *
+     * @param name     name which is appended to the thread name
+     * @param runnable a runnable to be executed by new thread instance
+     * @return the created thread
+     */
+    Thread newThread(String name, Runnable runnable);
+
+    /**
      * Creates a new thread pool using the default thread pool profile.
      *
      * @param source the source object, usually it should be <tt>this</tt> passed in as parameter

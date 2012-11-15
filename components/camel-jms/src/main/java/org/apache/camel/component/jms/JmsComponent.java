@@ -55,6 +55,7 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
     private QueueBrowseStrategy queueBrowseStrategy;
     private HeaderFilterStrategy headerFilterStrategy = new JmsHeaderFilterStrategy();
     private ExecutorService asyncStartStopExecutorService;
+    private MessageListenerContainerFactory messageListenerContainerFactory;
 
     public JmsComponent() {
     }
@@ -376,6 +377,10 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
         getConfiguration().setAllowNullBody(allowNullBody);
     }
 
+    public void setIncludeSentJMSMessageID(boolean includeSentJMSMessageID) {
+        getConfiguration().setIncludeSentJMSMessageID(includeSentJMSMessageID);
+    }
+
     public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
         this.applicationContext = applicationContext;
     }
@@ -495,6 +500,12 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
             parameters.put(KEY_FORMAT_STRATEGY_PARAM, strategyVal);
             endpoint.setJmsKeyFormatStrategy(resolveAndRemoveReferenceParameter(
                     parameters, KEY_FORMAT_STRATEGY_PARAM, JmsKeyFormatStrategy.class));
+        }
+
+        messageListenerContainerFactory = resolveAndRemoveReferenceParameter(parameters, "messageListenerContainerFactoryRef",
+                MessageListenerContainerFactory.class);
+        if (messageListenerContainerFactory != null) {
+            endpoint.setMessageListenerContainerFactory(messageListenerContainerFactory);
         }
 
         setProperties(endpoint.getConfiguration(), parameters);

@@ -79,6 +79,7 @@ import org.apache.camel.model.Constants;
 import org.apache.camel.model.DataFormatDefinition;
 import org.apache.camel.model.ModelCamelContext;
 import org.apache.camel.model.RouteDefinition;
+import org.apache.camel.model.RouteDefinitionHelper;
 import org.apache.camel.model.RoutesDefinition;
 import org.apache.camel.processor.interceptor.Debug;
 import org.apache.camel.processor.interceptor.Delayer;
@@ -119,6 +120,7 @@ import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.CamelContextHelper;
 import org.apache.camel.util.EndpointHelper;
 import org.apache.camel.util.EventHelper;
+import org.apache.camel.util.IntrospectionSupport;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.ServiceHelper;
 import org.apache.camel.util.StopWatch;
@@ -437,10 +439,12 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
             throw new ResolveEndpointFailedException(uri, e);
         }
 
+        final String rawUri = uri;
+
         // normalize uri so we can do endpoint hits with minor mistakes and parameters is not in the same order
         uri = normalizeEndpointUri(uri);
 
-        log.trace("Getting endpoint with normalized uri: {}", uri);
+        log.trace("Getting endpoint with raw uri: {}, normalized uri: {}", rawUri, uri);
 
         Endpoint answer;
         String scheme = null;
@@ -457,7 +461,11 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
                     // Ask the component to resolve the endpoint.
                     if (component != null) {
                         // Have the component create the endpoint if it can.
-                        answer = component.createEndpoint(uri);
+                        if (component.useRawUri()) {
+                            answer = component.createEndpoint(rawUri);
+                        } else {
+                            answer = component.createEndpoint(uri);
+                        }
 
                         if (answer != null && log.isDebugEnabled()) {
                             log.debug("{} converted to endpoint: {} by component: {}", new Object[]{URISupport.sanitizeUri(uri), answer, component});
@@ -710,6 +718,12 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
     }
 
     public void startRoute(RouteDefinition route) throws Exception {
+        // validate that the id's is all unique
+        String duplicate = RouteDefinitionHelper.validateUniqueIds(route, routeDefinitions);
+        if (duplicate != null) {
+            throw new FailedToStartRouteException(route.getId(), "duplicate id detected: " + duplicate + ". Please correct ids to be unique among all your routes.");
+        }
+
         // indicate we are staring the route using this thread so
         // we are able to query this if needed
         isStartingRoutes.set(true);
@@ -888,7 +902,10 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
     }
 
     public void addService(Object object) throws Exception {
+        doAddService(object, true);
+    }
 
+    private void doAddService(Object object, boolean closeOnShutdown) throws Exception {
         // inject CamelContext
         if (object instanceof CamelContextAware) {
             CamelContextAware aware = (CamelContextAware) object;
@@ -916,7 +933,7 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
             // do not add endpoints as they have their own list
             if (singleton && !(service instanceof Endpoint)) {
                 // only add to list of services to close if its not already there
-                if (!hasService(service)) {
+                if (closeOnShutdown && !hasService(service)) {
                     servicesToClose.add(service);
                 }
             }
@@ -983,6 +1000,12 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
 
             // language not known or not singleton, then use resolver
             answer = getLanguageResolver().resolveLanguage(language, this);
+
+            // inject CamelContext if aware
+            if (answer != null && answer instanceof CamelContextAware) {
+                ((CamelContextAware) answer).setCamelContext(this);
+            }
+
             if (answer != null) {
                 languages.put(language, answer);
             }
@@ -1538,7 +1561,8 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
         // and we needed to create endpoints up-front as it may be accessed before this context is started
         endpoints = new EndpointRegistry(this, endpoints);
         addService(endpoints);
-        addService(executorServiceManager);
+        // special for executorServiceManager as want to stop it manually
+        doAddService(executorServiceManager, false);
         addService(producerServicePool);
         addService(inflightRepository);
         addService(shutdownStrategy);
@@ -1638,13 +1662,18 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
             shutdownServices(notifier);
         }
 
-        // shutdown management as the last one
+        // shutdown executor service and management as the last one
+        shutdownServices(executorServiceManager);
         shutdownServices(managementStrategy);
+        shutdownServices(managementMBeanAssembler);
         shutdownServices(lifecycleStrategies);
         // do not clear lifecycleStrategies as we can start Camel again and get the route back as before
 
         // stop the lazy created so they can be re-created on restart
         forceStopLazyInitialization();
+
+        // stop to clear introspection cache
+        IntrospectionSupport.stop();
 
         stopWatch.stop();
         if (log.isInfoEnabled()) {
@@ -1942,8 +1971,6 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
     }
 
     private boolean doCheckStartupOrderClash(DefaultRouteStartupOrder answer, Map<Integer, DefaultRouteStartupOrder> inputs) throws FailedToStartRouteException {
-        // TODO: There could potential be routeId clash as well, so we should check for that as well
-
         // check for clash by startupOrder id
         DefaultRouteStartupOrder other = inputs.get(answer.getStartupOrder());
         if (other != null && answer != other) {
@@ -2389,7 +2416,14 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
     }
 
     public DataFormat resolveDataFormat(String name) {
-        return dataFormatResolver.resolveDataFormat(name, this);
+        DataFormat answer = dataFormatResolver.resolveDataFormat(name, this);
+
+        // inject CamelContext if aware
+        if (answer != null && answer instanceof CamelContextAware) {
+            ((CamelContextAware) answer).setCamelContext(this);
+        }
+
+        return answer;
     }
 
     public DataFormatDefinition resolveDataFormatDefinition(String name) {

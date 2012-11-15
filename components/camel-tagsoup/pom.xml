@@ -45,7 +45,7 @@
         <artifactId>tagsoup</artifactId>
     </dependency>
 
-    <!-- testing -->
+    <!-- test dependencies -->
     <dependency>
       <groupId>org.apache.camel</groupId>
       <artifactId>camel-test</artifactId>      
@@ -94,12 +94,11 @@
           </plugin>
         </plugins>
       </build>
+      
       <dependencies>
-
         <dependency>
           <groupId>xalan</groupId>
           <artifactId>xalan</artifactId>
-          <version>${xalan-version}</version>
           <scope>test</scope>
           <exclusions>
             <exclusion>

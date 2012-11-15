@@ -37,7 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * An implementation of @{link Consumer} which use the SMPP protocol
+ * An implementation of {@link Consumer} which use the SMPP protocol
  * 
  * @version 
  */
@@ -95,8 +95,9 @@ public class SmppConsumer extends DefaultConsumer {
         session.connectAndBind(this.configuration.getHost(), this.configuration.getPort(),
                 new BindParameter(BindType.BIND_RX, this.configuration.getSystemId(),
                         this.configuration.getPassword(), this.configuration.getSystemType(),
-                        TypeOfNumber.UNKNOWN, NumberingPlanIndicator.UNKNOWN, ""));
-        
+                        TypeOfNumber.UNKNOWN, NumberingPlanIndicator.UNKNOWN,
+                                  configuration.getAddressRange()));
+
         return session;
     }
     

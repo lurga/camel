@@ -25,6 +25,7 @@ import org.apache.camel.component.netty.ssl.SSLEngineFactory;
 import org.jboss.netty.channel.ChannelHandler;
 import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.channel.Channels;
+import org.jboss.netty.handler.execution.ExecutionHandler;
 import org.jboss.netty.handler.ssl.SslHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,6 +67,16 @@ public class DefaultServerPipelineFactory extends ServerPipelineFactory {
                 decoder = ((ChannelHandlerFactory) decoder).newChannelHandler();
             }
             addToPipeline("decoder-" + x, channelPipeline, decoder);
+        }
+
+        if (consumer.getConfiguration().isOrderedThreadPoolExecutor()) {
+            // this must be added just before the ServerChannelHandler
+            // use ordered thread pool, to ensure we process the events in order, and can send back
+            // replies in the expected order. eg this is required by TCP.
+            // and use a Camel thread factory so we have consistent thread namings
+            ExecutionHandler executionHandler = new ExecutionHandler(consumer.getEndpoint().getComponent().getExecutorService());
+            addToPipeline("executionHandler", channelPipeline, executionHandler);
+            LOG.debug("Using OrderedMemoryAwareThreadPoolExecutor with core pool size: {}", consumer.getConfiguration().getMaximumPoolSize());
         }
 
         // our handler must be added last

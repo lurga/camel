@@ -16,12 +16,13 @@
  */
 package org.apache.camel.cdi.internal;
 
-import java.util.ArrayList;
-import java.util.List;
-
+import java.lang.reflect.Type;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.BeanManager;
+import javax.enterprise.inject.spi.ProcessAnnotatedType;
 
 import org.apache.camel.RoutesBuilder;
 import org.apache.camel.RuntimeCamelException;
@@ -33,16 +34,33 @@ import org.apache.camel.util.ObjectHelper;
  * Configuration options to be applied to a {@link org.apache.camel.CamelContext} by a {@link CamelContextBean}
  */
 public class CamelContextConfig {
-    private final List<Bean<?>> routeBuilderBeans = new ArrayList<Bean<?>>();
+    // use a set to avoid duplicates
+    private final Set<Bean<?>> routeBuilderBeans = new LinkedHashSet<Bean<?>>();
+    private final Set<ProcessAnnotatedType<?>> patRouteBuilders = new LinkedHashSet<ProcessAnnotatedType<?>>();
 
     public void addRouteBuilderBean(Bean<?> bean) {
         routeBuilderBeans.add(bean);
     }
 
     public void configure(CdiCamelContext camelContext, BeanManager beanManager) {
+        for (ProcessAnnotatedType<?> pat : patRouteBuilders) {
+            final Set<Bean<?>> beans = beanManager.getBeans(pat.getAnnotatedType().getJavaClass());
+            final Bean<?> bean = beanManager.resolve(beans);
+            routeBuilderBeans.add(bean);
+        }
+        patRouteBuilders.clear();
+
         for (Bean<?> bean : routeBuilderBeans) {
             CreationalContext<?> createContext = beanManager.createCreationalContext(bean);
             Class<?> beanClass = bean.getBeanClass();
+            Set<Type> types = bean.getTypes();
+            for (Type type : types) {
+                // lets use the first type for producer methods
+                if (type instanceof Class<?>) {
+                    beanClass = (Class<?>) type;
+                    break;
+                }
+            }
             Object reference = beanManager.getReference(bean, beanClass, createContext);
             ObjectHelper.notNull(reference, "Could not instantiate bean of type " + beanClass.getName() + " for " + bean);
             try {
@@ -63,5 +81,9 @@ public class CamelContextConfig {
                         e);
             }
         }
+    }
+
+    public void addRouteBuilderBean(final ProcessAnnotatedType<?> process) {
+        patRouteBuilders.add(process);
     }
 }

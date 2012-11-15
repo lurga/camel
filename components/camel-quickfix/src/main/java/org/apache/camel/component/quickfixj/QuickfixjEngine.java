@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.management.JMException;
+import javax.management.ObjectName;
 
 import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.ObjectHelper;
@@ -95,6 +96,8 @@ public class QuickfixjEngine extends ServiceSupport {
     private final MessageCorrelator messageCorrelator = new MessageCorrelator();
     private List<QuickfixjEventListener> eventListeners = new CopyOnWriteArrayList<QuickfixjEventListener>();
     private final String uri;
+    private ObjectName acceptorObjectName;
+    private ObjectName initiatorObjectName;
 
     public enum ThreadModel {
         ThreadPerConnector, ThreadPerSession;
@@ -220,13 +223,13 @@ public class QuickfixjEngine extends ServiceSupport {
         if (acceptor != null) {
             acceptor.start();
             if (jmxExporter != null) {
-                jmxExporter.register(acceptor);
+                acceptorObjectName = jmxExporter.register(acceptor);
             }
         }
         if (initiator != null) {
             initiator.start();
             if (jmxExporter != null) {
-                jmxExporter.register(initiator);
+                initiatorObjectName = jmxExporter.register(initiator);
             }
         }
     }
@@ -235,9 +238,17 @@ public class QuickfixjEngine extends ServiceSupport {
     protected void doStop() throws Exception {
         if (acceptor != null) {
             acceptor.stop();
+
+            if (jmxExporter != null && acceptorObjectName != null) {
+                jmxExporter.getMBeanServer().unregisterMBean(acceptorObjectName);
+            }
         }
         if (initiator != null) {
             initiator.stop();
+
+            if (jmxExporter != null && initiatorObjectName != null) {
+                jmxExporter.getMBeanServer().unregisterMBean(initiatorObjectName);
+            }
         }
     }
 
@@ -456,10 +467,11 @@ public class QuickfixjEngine extends ServiceSupport {
                 throw new DispatcherException(e);
             }
         }
-        
-        @SuppressWarnings("unchecked")
+
         private <T extends Exception> void rethrowIfType(Exception e, Class<T> exceptionClass) throws T {
-            throw (T) e;
+            if (e.getClass() == exceptionClass) {
+                throw exceptionClass.cast(e);
+            }
         }
 
         private void dispatch(QuickfixjEventCategory quickfixjEventCategory, SessionID sessionID, Message message) throws Exception {
@@ -471,15 +483,17 @@ public class QuickfixjEngine extends ServiceSupport {
                 listener.onEvent(quickfixjEventCategory, sessionID, message);
             }
         }
-        
-        @SuppressWarnings("serial")
+
         private class DispatcherException extends RuntimeException {
+
+            private static final long serialVersionUID = 1L;
+
             public DispatcherException(Throwable cause) {
                 super(cause);
             }
         }
     }
-        
+
     public String getUri() {
         return uri;
     }

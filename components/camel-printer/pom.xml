@@ -40,7 +40,7 @@
             <artifactId>camel-core</artifactId>
         </dependency>
 
-        <!-- testing -->
+        <!-- test dependencies -->
         <dependency>
             <groupId>org.apache.camel</groupId>
             <artifactId>camel-test</artifactId>
@@ -54,10 +54,9 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-all</artifactId>
-            <version>1.8.5</version>
+            <version>${mockito-version}</version>
             <scope>test</scope>
         </dependency>
-        <!-- logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
@@ -67,7 +66,6 @@
 
     <build>
         <plugins>
-
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-clean-plugin</artifactId>
@@ -81,5 +79,20 @@
             </plugin>
         </plugins>
     </build>
-    
+
+	<!-- skip tests on AIX -->
+	<profiles>
+		<profile>
+			<id>aix</id>
+			<activation>
+				<os>
+					<family>AIX</family>
+				</os>
+			</activation>
+			<properties>
+				<skipTests>true</skipTests>
+			</properties>
+		</profile>
+	</profiles>
+
 </project>

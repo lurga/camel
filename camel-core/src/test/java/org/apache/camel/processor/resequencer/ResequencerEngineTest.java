@@ -20,17 +20,14 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
 
-import junit.framework.TestCase;
+import org.apache.camel.TestSupport;
 
-public class ResequencerEngineTest extends TestCase {
+public class ResequencerEngineTest extends TestSupport {
 
-    private static final boolean IGNORE_LOAD_TESTS 
-        = Boolean.parseBoolean(System.getProperty("ignore.load.tests", "true"));
+    private static final boolean IGNORE_LOAD_TESTS = Boolean.parseBoolean(System.getProperty("ignore.load.tests", "true"));
     
     private ResequencerEngineSync<Integer> resequencer;
-    
     private ResequencerRunner<Integer> runner;
-    
     private SequenceBuffer<Integer> buffer;
     
     public void setUp() throws Exception {
@@ -70,13 +67,13 @@ public class ResequencerEngineTest extends TestCase {
         assertEquals((Integer)4, resequencer.getLastDelivered());
     }
     
-    public void testTimout4() throws Exception {
+    public void testTimeout4() throws Exception {
         initResequencer(500, 10);
         resequencer.setLastDelivered(2);
         resequencer.insert(4);
         resequencer.insert(3);
-        assertEquals((Integer)3, buffer.poll(125));
-        assertEquals((Integer)4, buffer.poll(125));
+        assertEquals((Integer)3, buffer.poll(250));
+        assertEquals((Integer)4, buffer.poll(250));
         assertEquals((Integer)4, resequencer.getLastDelivered());
     }
     
@@ -91,20 +88,27 @@ public class ResequencerEngineTest extends TestCase {
             list.add(i);
         }
         Random random = new Random(System.currentTimeMillis());
-        System.out.println("Input sequence:");
+        StringBuilder sb = new StringBuilder(4000);
+        sb.append("Input sequence: ");
         long millis = System.currentTimeMillis();
         for (int i = input; i > 0; i--) {
             int r = random.nextInt(i);
             int next = list.remove(r);
-            System.out.print(next + " ");
+            sb.append(next).append(" ");
             resequencer.insert(next); 
         }
-        System.out.println("\nOutput sequence:");
+        log.info(sb.toString());
+
+        // clear
+        sb.delete(0, sb.length());
+
+        sb.append("Output sequence: ");
         for (int i = 0; i < input; i++) {
-            System.out.print(buffer.take() + " ");
+            sb.append(buffer.take()).append(" ");
         }
         millis = System.currentTimeMillis() - millis;
-        System.out.println("\nDuration = " + millis + " ms");
+        log.info(sb.toString());
+        log.info("Duration = " + millis + " ms");
     }
     
     public void testReverse1() throws Exception {
@@ -126,10 +130,12 @@ public class ResequencerEngineTest extends TestCase {
         for (int i = 99; i >= 0; i--) {
             resequencer.insert(i);
         }
-        System.out.println("\nOutput sequence:");
+        StringBuilder sb = new StringBuilder(2500);
+        sb.append("Output sequence: ");
         for (int i = 0; i < 100; i++) {
-            System.out.print(buffer.take() + " ");
+            sb.append(buffer.take()).append(" ");
         }
+        log.info(sb.toString());
     }
     
     private void initResequencer(long timeout, int capacity) {
@@ -142,6 +148,13 @@ public class ResequencerEngineTest extends TestCase {
         resequencer = new ResequencerEngineSync<Integer>(engine);
         runner = new ResequencerRunner<Integer>(resequencer, 50);
         runner.start();
+
+        // give the runner time to start
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            // ignore
+        }
     }
     
 }

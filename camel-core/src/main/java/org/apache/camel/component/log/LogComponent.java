@@ -26,7 +26,6 @@ import org.apache.camel.impl.DefaultComponent;
 import org.apache.camel.processor.CamelLogProcessor;
 import org.apache.camel.processor.ThroughputLogger;
 import org.apache.camel.util.CamelLogger;
-import org.apache.camel.util.IntrospectionSupport;
 
 /**
  * The <a href="http://camel.apache.org/log.html">Log Component</a>
@@ -52,7 +51,7 @@ public class LogComponent extends DefaultComponent {
             logger = new ThroughputLogger(camelLogger, this.getCamelContext(), groupInterval, groupDelay, groupActiveOnly);
         } else {
             LogFormatter formatter = new LogFormatter();
-            IntrospectionSupport.setProperties(formatter, parameters);
+            setProperties(formatter, parameters);
 
             logger = new CamelLogProcessor(camelLogger, formatter);
         }

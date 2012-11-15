@@ -25,7 +25,6 @@ import javax.xml.bind.annotation.XmlTransient;
 
 import org.apache.camel.Expression;
 import org.apache.camel.Processor;
-import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.processor.SortProcessor;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.ObjectHelper;
@@ -47,7 +46,7 @@ public class SortDefinition<T> extends NoOutputExpressionNode {
     }
 
     public SortDefinition(Expression expression) {
-        setExpression(new ExpressionDefinition(expression));
+        setExpression(ExpressionNodeHelper.toExpressionDefinition(expression));
     }
 
     public SortDefinition(Expression expression, Comparator<? super T> comparator) {

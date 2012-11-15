@@ -97,7 +97,7 @@ public class WireTapDefinition<Type extends ProcessorDefinition<Type>> extends N
         WireTapProcessor answer = new WireTapProcessor(endpoint, target, getPattern(), threadPool, shutdownThreadPool);
         answer.setCopy(isCopy());
         if (newExchangeProcessorRef != null) {
-            newExchangeProcessor = routeContext.lookup(newExchangeProcessorRef, Processor.class);
+            newExchangeProcessor = routeContext.mandatoryLookup(newExchangeProcessorRef, Processor.class);
         }
         if (newExchangeProcessor != null) {
             answer.addNewExchangeProcessor(newExchangeProcessor);
@@ -199,6 +199,18 @@ public class WireTapDefinition<Type extends ProcessorDefinition<Type>> extends N
      */
     public WireTapDefinition<Type> copy() {
         setCopy(true);
+        return this;
+    }
+    
+    /**
+     * Uses a copy of the original exchange
+     *
+     * @param copy if it is true camel will copy the original exchange,
+     *             if it is false camel will not copy the original exchange 
+     * @return the builder
+     */
+    public WireTapDefinition<Type> copy(boolean copy) {
+        setCopy(copy);
         return this;
     }
 

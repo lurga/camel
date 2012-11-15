@@ -126,19 +126,22 @@ public class Enricher extends ServiceSupport implements AsyncProcessor {
 
                     // prepare the exchanges for aggregation
                     ExchangeHelper.prepareAggregation(exchange, resourceExchange);
-                    Exchange aggregatedExchange = aggregationStrategy.aggregate(exchange, resourceExchange);
-                    if (aggregatedExchange != null) {
-                        // copy aggregation result onto original exchange (preserving pattern)
-                        copyResultsPreservePattern(exchange, aggregatedExchange);
+                    Exchange aggregatedExchange;
+                    try {
+                        aggregatedExchange = aggregationStrategy.aggregate(exchange, resourceExchange);
+                        if (aggregatedExchange != null) {
+                            // copy aggregation result onto original exchange (preserving pattern)
+                            copyResultsPreservePattern(exchange, aggregatedExchange);
+                        }
+                    } catch (Throwable e) {
+                        // if the aggregationStrategy threw an exception, set it on the original exchange
+                        exchange.setException(new CamelExchangeException("Error occurred during aggregation", exchange, e));
+                        callback.done(false);
                     }
                 }
 
-                // set header with the uri of the endpoint enriched so we can use that for tracing etc
-                if (exchange.hasOut()) {
-                    exchange.getOut().setHeader(Exchange.TO_ENDPOINT, producer.getEndpoint().getEndpointUri());
-                } else {
-                    exchange.getIn().setHeader(Exchange.TO_ENDPOINT, producer.getEndpoint().getEndpointUri());
-                }
+                // set property with the uri of the endpoint enriched so we can use that for tracing etc
+                exchange.setProperty(Exchange.TO_ENDPOINT, producer.getEndpoint().getEndpointUri());
 
                 callback.done(false);
             }
@@ -176,12 +179,8 @@ public class Enricher extends ServiceSupport implements AsyncProcessor {
             }
         }
 
-        // set header with the uri of the endpoint enriched so we can use that for tracing etc
-        if (exchange.hasOut()) {
-            exchange.getOut().setHeader(Exchange.TO_ENDPOINT, producer.getEndpoint().getEndpointUri());
-        } else {
-            exchange.getIn().setHeader(Exchange.TO_ENDPOINT, producer.getEndpoint().getEndpointUri());
-        }
+        // set property with the uri of the endpoint enriched so we can use that for tracing etc
+        exchange.setProperty(Exchange.TO_ENDPOINT, producer.getEndpoint().getEndpointUri());
 
         callback.done(true);
         return true;
@@ -218,11 +217,11 @@ public class Enricher extends ServiceSupport implements AsyncProcessor {
     }
 
     protected void doStart() throws Exception {
-        ServiceHelper.startService(producer);
+        ServiceHelper.startServices(aggregationStrategy, producer);
     }
 
     protected void doStop() throws Exception {
-        ServiceHelper.stopService(producer);
+        ServiceHelper.stopServices(producer, aggregationStrategy);
     }
 
     private static class CopyAggregationStrategy implements AggregationStrategy {

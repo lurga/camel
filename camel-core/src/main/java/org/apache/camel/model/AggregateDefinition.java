@@ -106,13 +106,13 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
 
     public AggregateDefinition(Predicate predicate) {
         if (predicate != null) {
-            setExpression(new ExpressionDefinition(predicate));
+            setExpression(ExpressionNodeHelper.toExpressionDefinition(predicate));
         }
     }    
     
     public AggregateDefinition(Expression correlationExpression) {
         if (correlationExpression != null) {
-            setExpression(new ExpressionDefinition(correlationExpression));
+            setExpression(ExpressionNodeHelper.toExpressionDefinition(correlationExpression));
         }
     }
 
@@ -259,7 +259,7 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
     private AggregationStrategy createAggregationStrategy(RouteContext routeContext) {
         AggregationStrategy strategy = getAggregationStrategy();
         if (strategy == null && strategyRef != null) {
-            strategy = routeContext.lookup(strategyRef, AggregationStrategy.class);
+            strategy = routeContext.mandatoryLookup(strategyRef, AggregationStrategy.class);
         }
 
         if (groupExchanges != null && groupExchanges) {
@@ -284,10 +284,7 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
     private AggregationRepository createAggregationRepository(RouteContext routeContext) {
         AggregationRepository repository = getAggregationRepository();
         if (repository == null && aggregationRepositoryRef != null) {
-            repository = routeContext.lookup(aggregationRepositoryRef, AggregationRepository.class);
-            if (repository == null) {
-                throw new IllegalArgumentException("AggregationRepositoryRef " + aggregationRepositoryRef + " not found in registry.");
-            }
+            repository = routeContext.mandatoryLookup(aggregationRepositoryRef, AggregationRepository.class);
         }
         return repository;
     }

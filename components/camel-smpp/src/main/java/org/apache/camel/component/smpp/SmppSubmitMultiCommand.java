@@ -27,7 +27,6 @@ import java.util.Map;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.jsmpp.bean.Address;
-import org.jsmpp.bean.Alphabet;
 import org.jsmpp.bean.DataCoding;
 import org.jsmpp.bean.ESMClass;
 import org.jsmpp.bean.GSMSpecificFeature;
@@ -56,7 +55,9 @@ public class SmppSubmitMultiCommand extends SmppSmCommand {
         
         for (SubmitMulti submitMulti : submitMulties) {
             SubmitMultiResult result;
-            log.debug("Sending multiple short messages for exchange id '{}'...", exchange.getExchangeId());
+            if (log.isDebugEnabled()) {
+                log.debug("Sending multiple short messages for exchange id '{}'...", exchange.getExchangeId());
+            }
             
             try {
                 result = session.submitMultiple(
@@ -82,7 +83,9 @@ public class SmppSubmitMultiCommand extends SmppSmCommand {
             }
         }
 
-        log.debug("Sent multiple short messages for exchange id '{}' and received results '{}'", exchange.getExchangeId(), results);
+        if (log.isDebugEnabled()) {
+            log.debug("Sent multiple short messages for exchange id '{}' and received results '{}'", exchange.getExchangeId(), results);
+        }
 
         List<String> messageIDs = new ArrayList<String>(results.size());
         // {messageID : [{destAddr : address, error : errorCode}]}
@@ -118,14 +121,8 @@ public class SmppSubmitMultiCommand extends SmppSmCommand {
     }
 
     protected SubmitMulti[] createSubmitMulti(Exchange exchange) {
-        String body = exchange.getIn().getBody(String.class);
-
-        byte providedAlphabet = getProvidedAlphabet(exchange);
-        Alphabet determinedAlphabet = determineAlphabet(exchange);
-        SmppSplitter splitter = createSplitter(exchange);
-        Charset charset = determineCharset(providedAlphabet, determinedAlphabet.value());
-
-        byte[][] segments = splitter.split(body.getBytes(charset));
+        SmppSplitter splitter = createSplitter(exchange.getIn());
+        byte[][] segments = splitter.split(getShortMessage(exchange.getIn()));
 
         ESMClass esmClass;
         // multipart message

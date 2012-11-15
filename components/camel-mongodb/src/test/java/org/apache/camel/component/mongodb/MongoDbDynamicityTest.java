@@ -23,25 +23,17 @@ import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
 import com.mongodb.WriteResult;
 
-import org.apache.camel.CamelContext;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.component.properties.PropertiesComponent;
-import org.apache.camel.spring.SpringCamelContext;
+
 import org.junit.Test;
-import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 public class MongoDbDynamicityTest extends AbstractMongoDbTest {
-
-    @Override
-    protected CamelContext createCamelContext() throws Exception {
-        applicationContext = new ClassPathXmlApplicationContext("org/apache/camel/component/mongodb/mongoComponentTest.xml");
-        return SpringCamelContext.springCamelContext(applicationContext);
-    }
     
     @Test
     public void testInsertDynamicityDisabled() {
         assertEquals(0, testCollection.count());
         mongo.getDB("otherDB").dropDatabase();
+        db.getCollection("otherCollection").drop();
         assertFalse("The otherDB database should not exist", mongo.getDatabaseNames().contains("otherDB"));
 
         String body = "{\"_id\": \"testInsertDynamicityDisabled\", \"a\" : \"1\"}";
@@ -69,6 +61,7 @@ public class MongoDbDynamicityTest extends AbstractMongoDbTest {
     public void testInsertDynamicityEnabledDBOnly() {
         assertEquals(0, testCollection.count());
         mongo.getDB("otherDB").dropDatabase();
+        db.getCollection("otherCollection").drop();
         assertFalse("The otherDB database should not exist", mongo.getDatabaseNames().contains("otherDB"));
 
         String body = "{\"_id\": \"testInsertDynamicityEnabledDBOnly\", \"a\" : \"1\"}";
@@ -94,6 +87,7 @@ public class MongoDbDynamicityTest extends AbstractMongoDbTest {
     public void testInsertDynamicityEnabledCollectionOnly() {
         assertEquals(0, testCollection.count());
         mongo.getDB("otherDB").dropDatabase();
+        db.getCollection("otherCollection").drop();
         assertFalse("The otherDB database should not exist", mongo.getDatabaseNames().contains("otherDB"));
 
         String body = "{\"_id\": \"testInsertDynamicityEnabledCollectionOnly\", \"a\" : \"1\"}";
@@ -118,6 +112,7 @@ public class MongoDbDynamicityTest extends AbstractMongoDbTest {
     public void testInsertDynamicityEnabledDBAndCollection() {
         assertEquals(0, testCollection.count());
         mongo.getDB("otherDB").dropDatabase();
+        db.getCollection("otherCollection").drop();
         assertFalse("The otherDB database should not exist", mongo.getDatabaseNames().contains("otherDB"));
 
         String body = "{\"_id\": \"testInsertDynamicityEnabledDBAndCollection\", \"a\" : \"1\"}";
@@ -143,13 +138,10 @@ public class MongoDbDynamicityTest extends AbstractMongoDbTest {
     protected RouteBuilder createRouteBuilder() throws Exception {
         return new RouteBuilder() {
             public void configure() {
-                
-                PropertiesComponent pc = new PropertiesComponent("classpath:mongodb.test.properties");
-                context.addComponent("properties", pc);
                                 
-                from("direct:noDynamicity").to("mongodb:myDb?database={{mongodb.testDb}}&collection={{mongodb.testCollection}}&operation=insert");
-                from("direct:noDynamicityExplicit").to("mongodb:myDb?database={{mongodb.testDb}}&collection={{mongodb.testCollection}}&operation=insert&dynamicity=false");
-                from("direct:dynamicityEnabled").to("mongodb:myDb?database={{mongodb.testDb}}&collection={{mongodb.testCollection}}&operation=insert&dynamicity=true");
+                from("direct:noDynamicity").to("mongodb:myDb?database={{mongodb.testDb}}&collection={{mongodb.testCollection}}&operation=insert&writeConcern=SAFE");
+                from("direct:noDynamicityExplicit").to("mongodb:myDb?database={{mongodb.testDb}}&collection={{mongodb.testCollection}}&operation=insert&dynamicity=false&writeConcern=SAFE");
+                from("direct:dynamicityEnabled").to("mongodb:myDb?database={{mongodb.testDb}}&collection={{mongodb.testCollection}}&operation=insert&dynamicity=true&writeConcern=SAFE");
 
             }
         };

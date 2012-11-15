@@ -81,7 +81,7 @@ public final class SmppUtils {
      * Java format is (yyMMddHHmmSS).
      *
      * @param date in <tt>String</tt> format.
-     * @return
+     * @return the date
      * @throws NumberFormatException if there is contains non number on
      *         <code>date</code> parameter.
      * @throws IndexOutOfBoundsException if the date length in <tt>String</tt>
@@ -116,7 +116,13 @@ public final class SmppUtils {
     }
 
     public static Alphabet parseAlphabetFromDataCoding(byte dataCoding) {
-        return Alphabet.valueOf((byte) (dataCoding & Alphabet.MASK_ALPHABET));
+        /* Both the 3.4 and 5.0 SMPP specs clearly state that 0x02 is
+         * 'Octet-unspecified (8-bit)', but jsmpp doesn't account for this for
+         * some reason.
+         */
+        return dataCoding == 0x02
+            ? Alphabet.ALPHA_8_BIT
+            : Alphabet.valueOf((byte)(dataCoding & Alphabet.MASK_ALPHABET));
     }
 
     public static boolean isGsm0338Encodeable(byte[] aMessage) {

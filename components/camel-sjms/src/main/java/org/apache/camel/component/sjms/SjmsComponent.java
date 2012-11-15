@@ -17,7 +17,6 @@
 package org.apache.camel.component.sjms;
 
 import java.util.Map;
-
 import javax.jms.ConnectionFactory;
 
 import org.apache.camel.CamelException;
@@ -25,7 +24,8 @@ import org.apache.camel.Endpoint;
 import org.apache.camel.ExchangePattern;
 import org.apache.camel.component.sjms.jms.ConnectionFactoryResource;
 import org.apache.camel.component.sjms.jms.ConnectionResource;
-import org.apache.camel.component.sjms.tx.DefaultTransactionCommitStrategy;
+import org.apache.camel.component.sjms.jms.KeyFormatStrategy;
+import org.apache.camel.component.sjms.taskmanager.TimedTaskManager;
 import org.apache.camel.impl.DefaultComponent;
 import org.apache.camel.spi.HeaderFilterStrategy;
 import org.apache.camel.spi.HeaderFilterStrategyAware;
@@ -34,7 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Represents the component that manages {@link SimpleJmsEndpoint}.
+ * The <a href="http://camel.apache.org/sjms">Simple JMS</a> component.
  */
 public class SjmsComponent extends DefaultComponent implements HeaderFilterStrategyAware {
     private static final transient Logger LOGGER = LoggerFactory.getLogger(SjmsComponent.class);
@@ -43,19 +43,10 @@ public class SjmsComponent extends DefaultComponent implements HeaderFilterStrat
     private ConnectionResource connectionResource;
     private HeaderFilterStrategy headerFilterStrategy = new SjmsHeaderFilterStrategy();
     private KeyFormatStrategy keyFormatStrategy;
-    private Integer maxConnections = 1;
-    private TransactionCommitStrategy commitStrategy = new DefaultTransactionCommitStrategy();
+    private Integer connectionCount = 1;
+    private TransactionCommitStrategy transactionCommitStrategy;
+    private TimedTaskManager timedTaskManager;
 
-    /**
-     * @see
-     * org.apache.camel.impl.DefaultComponent#createEndpoint(java.lang.String,
-     * java.lang.String, java.util.Map)
-     * @param uri The value passed into our call to create an endpoint
-     * @param remaining
-     * @param parameters
-     * @return
-     * @throws Exception
-     */
     @Override
     protected Endpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
         validateMepAndReplyTo(parameters);
@@ -64,6 +55,9 @@ public class SjmsComponent extends DefaultComponent implements HeaderFilterStrat
         setProperties(endpoint, parameters);
         if (endpoint.isTransacted()) {
             endpoint.setSynchronous(true);
+        }
+        if (transactionCommitStrategy != null) {
+            endpoint.setTransactionCommitStrategy(transactionCommitStrategy);
         }
         return endpoint;
     }
@@ -76,7 +70,7 @@ public class SjmsComponent extends DefaultComponent implements HeaderFilterStrat
      * @return String
      * @throws Exception
      */
-    private String normalizeUri(String uri) throws Exception {
+    private static String normalizeUri(String uri) throws Exception {
         String tempUri = uri;
         String endpointName = tempUri.substring(0, tempUri.indexOf(":"));
         tempUri = tempUri.substring(endpointName.length());
@@ -89,7 +83,7 @@ public class SjmsComponent extends DefaultComponent implements HeaderFilterStrat
         }
         if (ObjectHelper.isEmpty(protocol)) {
             protocol = "queue";
-        } else if (protocol.equals("queue") || protocol.equals("topic")) {
+        } else if (protocol != null && (protocol.equals("queue") || protocol.equals("topic"))) {
             tempUri = tempUri.substring(protocol.length() + 1);
         } else {
             throw new Exception("Unsupported Protocol: " + protocol);
@@ -110,14 +104,14 @@ public class SjmsComponent extends DefaultComponent implements HeaderFilterStrat
      * @throws Exception throws a {@link CamelException} when MEP equals InOnly
      *             and namedReplyTo is defined.
      */
-    private void validateMepAndReplyTo(Map<String, Object> parameters) throws Exception {
+    private static void validateMepAndReplyTo(Map<String, Object> parameters) throws Exception {
         boolean namedReplyToSet = parameters.containsKey("namedReplyTo");
         boolean mepSet = parameters.containsKey("exchangePattern");
         if (namedReplyToSet && mepSet) {
             if (!parameters.get("exchangePattern").equals(ExchangePattern.InOut.toString())) {
                 String namedReplyTo = (String)parameters.get("namedReplyTo");
                 ExchangePattern mep = ExchangePattern.valueOf((String)parameters.get("exchangePattern"));
-                throw new CamelException("Setting parameter namedReplyTo=" + namedReplyTo + " requires a MEP of type InOut.  Parameter exchangePattern is set to " + mep);
+                throw new CamelException("Setting parameter namedReplyTo=" + namedReplyTo + " requires a MEP of type InOut. Parameter exchangePattern is set to " + mep);
             }
         }
     }
@@ -126,11 +120,13 @@ public class SjmsComponent extends DefaultComponent implements HeaderFilterStrat
     protected void doStart() throws Exception {
         super.doStart();
 
-        LOGGER.debug("Verify ConnectionResource");
+        timedTaskManager = new TimedTaskManager();
+
+        LOGGER.trace("Verify ConnectionResource");
         if (getConnectionResource() == null) {
-            LOGGER.debug("No ConnectionResource provided.  Initialize the ConnectionFactoryResource.");
+            LOGGER.debug("No ConnectionResource provided. Initialize the ConnectionFactoryResource.");
             // We always use a connection pool, even for a pool of 1
-            ConnectionFactoryResource connections = new ConnectionFactoryResource(getMaxConnections(), getConnectionFactory());
+            ConnectionFactoryResource connections = new ConnectionFactoryResource(getConnectionCount(), getConnectionFactory());
             connections.fillPool();
             setConnectionResource(connections);
         } else if (getConnectionResource() instanceof ConnectionFactoryResource) {
@@ -140,6 +136,8 @@ public class SjmsComponent extends DefaultComponent implements HeaderFilterStrat
 
     @Override
     protected void doStop() throws Exception {
+        timedTaskManager.cancelTasks();
+
         if (getConnectionResource() != null) {
             if (getConnectionResource() instanceof ConnectionFactoryResource) {
                 ((ConnectionFactoryResource)getConnectionResource()).drainPool();
@@ -151,9 +149,6 @@ public class SjmsComponent extends DefaultComponent implements HeaderFilterStrat
     /**
      * Sets the ConnectionFactory value of connectionFactory for this instance
      * of SjmsComponent.
-     * 
-     * @param connectionFactory Sets ConnectionFactory, default is TODO add
-     *            default
      */
     public void setConnectionFactory(ConnectionFactory connectionFactory) {
         this.connectionFactory = connectionFactory;
@@ -187,12 +182,12 @@ public class SjmsComponent extends DefaultComponent implements HeaderFilterStrat
         return connectionResource;
     }
 
-    public void setMaxConnections(Integer maxConnections) {
-        this.maxConnections = maxConnections;
+    public void setConnectionCount(Integer maxConnections) {
+        this.connectionCount = maxConnections;
     }
 
-    public Integer getMaxConnections() {
-        return maxConnections;
+    public Integer getConnectionCount() {
+        return connectionCount;
     }
 
     public void setKeyFormatStrategy(KeyFormatStrategy keyFormatStrategy) {
@@ -204,23 +199,28 @@ public class SjmsComponent extends DefaultComponent implements HeaderFilterStrat
     }
 
     /**
-     * Gets the TransactionCommitStrategy value of commitStrategy for this
+     * Gets the TransactionCommitStrategy value of transactionCommitStrategy for this
      * instance of SjmsComponent.
      * 
-     * @return the commitStrategy
+     * @return the transactionCommitStrategy
      */
-    public TransactionCommitStrategy getCommitStrategy() {
-        return commitStrategy;
+    public TransactionCommitStrategy getTransactionCommitStrategy() {
+        return transactionCommitStrategy;
     }
 
     /**
-     * Sets the TransactionCommitStrategy value of commitStrategy for this
+     * Sets the TransactionCommitStrategy value of transactionCommitStrategy for this
      * instance of SjmsComponent.
-     * 
-     * @param commitStrategy Sets TransactionCommitStrategy, default is TODO add
-     *            default
      */
-    public void setCommitStrategy(TransactionCommitStrategy commitStrategy) {
-        this.commitStrategy = commitStrategy;
+    public void setTransactionCommitStrategy(TransactionCommitStrategy commitStrategy) {
+        this.transactionCommitStrategy = commitStrategy;
+    }
+
+    public TimedTaskManager getTimedTaskManager() {
+        return timedTaskManager;
+    }
+
+    public void setTimedTaskManager(TimedTaskManager timedTaskManager) {
+        this.timedTaskManager = timedTaskManager;
     }
 }

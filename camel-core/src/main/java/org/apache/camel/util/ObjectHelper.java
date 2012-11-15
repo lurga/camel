@@ -656,7 +656,7 @@ public final class ObjectHelper {
         if (camelProperties != null) {
             for (Map.Entry<String, String> entry : camelProperties.entrySet()) {
                 String key = entry.getKey();
-                if (key.startsWith(prefix)) {
+                if (key != null && key.startsWith(prefix)) {
                     answer.put(key.substring(prefix.length()), entry.getValue());
                 }
             }
@@ -905,17 +905,7 @@ public final class ObjectHelper {
      * @return the modified or unmodified string if there were no changes
      */
     private static String resolveUriPath(String name) {
-        String answer = name;
-        if (answer.indexOf("//") > -1) {
-            answer = answer.replaceAll("//", "/");
-        }
-        if (answer.indexOf("../") > -1) {
-            answer = answer.replaceAll("[A-Za-z0-9]*/\\.\\./", "");
-        }
-        if (answer.indexOf("./") > -1) {
-            answer = answer.replaceAll("\\./", "");
-        }
-        return answer;
+        return FileUtil.compactPath(name);
     }
 
     /**

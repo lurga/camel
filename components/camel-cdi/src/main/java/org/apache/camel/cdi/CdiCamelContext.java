@@ -24,6 +24,7 @@ import javax.inject.Inject;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.spi.Injector;
 import org.apache.camel.spi.Registry;
+import org.apache.camel.util.ObjectHelper;
 
 /**
  * CDI {@link org.apache.camel.CamelContext} class.
@@ -55,13 +56,22 @@ public class CdiCamelContext extends DefaultCamelContext {
 
     @PostConstruct
     @Override
-    public void start() throws Exception {
-        super.start();
+    public void start() {
+        try {
+            super.start();
+        } catch (Exception e) {
+            ObjectHelper.wrapRuntimeCamelException(e);
+        }
     }
 
     @PreDestroy
     @Override
-    public void stop() throws Exception {
-        super.stop();
+    public void stop() {
+        try {
+            super.stop();
+        } catch (Exception e) {
+            ObjectHelper.wrapRuntimeCamelException(e);
+        }
     }
+
 }

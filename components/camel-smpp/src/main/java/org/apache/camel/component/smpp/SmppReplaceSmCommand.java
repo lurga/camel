@@ -21,7 +21,6 @@ import java.util.Date;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
-import org.jsmpp.bean.Alphabet;
 import org.jsmpp.bean.NumberingPlanIndicator;
 import org.jsmpp.bean.RegisteredDelivery;
 import org.jsmpp.bean.ReplaceSm;
@@ -36,22 +35,15 @@ public class SmppReplaceSmCommand extends SmppSmCommand {
 
     @Override
     public void execute(Exchange exchange) throws SmppException {
-        String body = exchange.getIn().getBody(String.class);
-
-        byte providedAlphabet = getProvidedAlphabet(exchange);
-        Alphabet determinedAlphabet = determineAlphabet(exchange);
-        Charset charset = determineCharset(providedAlphabet, determinedAlphabet.value());
-
-        byte[] message = null;
-        if (body != null) {
-            message = body.getBytes(charset);
-        }
+        byte[] message = getShortMessage(exchange.getIn());
 
         ReplaceSm replaceSm = createReplaceSmTempate(exchange);
         replaceSm.setShortMessage(message);
-        
-        log.debug("Sending replacement command for a short message for exchange id '{}' and message id '{}'",
-                exchange.getExchangeId(), replaceSm.getMessageId());
+
+        if (log.isDebugEnabled()) {
+            log.debug("Sending replacement command for a short message for exchange id '{}' and message id '{}'",
+                    exchange.getExchangeId(), replaceSm.getMessageId());
+        }
 
         try {
             session.replaceShortMessage(
@@ -68,8 +60,10 @@ public class SmppReplaceSmCommand extends SmppSmCommand {
             throw new SmppException(e);
         }
 
-        log.debug("Sent replacement command for a short message for exchange id '{}' and message id '{}'",
-                exchange.getExchangeId(), replaceSm.getMessageId());
+        if (log.isDebugEnabled()) {
+            log.debug("Sent replacement command for a short message for exchange id '{}' and message id '{}'",
+                    exchange.getExchangeId(), replaceSm.getMessageId());
+        }
         
         Message rspMsg = getResponseMessage(exchange);
         rspMsg.setHeader(SmppConstants.ID, replaceSm.getMessageId());

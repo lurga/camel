@@ -32,12 +32,6 @@
 
   <properties>
     <camel.osgi.export.pkg>org.apache.camel.spring.javaconfig.*</camel.osgi.export.pkg>
-    <camel.osgi.import>
-        !org.apache.camel.spring.javaconfig.*,
-        org.apache.camel.*;${camel.osgi.import.camel.version},
-        org.springframework.*;version="[3,4)",
-        *
-    </camel.osgi.import>
     <!-- The test module has the dependency of Spring 3.1.1, but the module can run with Spring 3.0.x out of box -->
     <spring-version>3.1.1.RELEASE</spring-version>
   </properties>
@@ -65,10 +59,10 @@
     <dependency>
       <groupId>org.apache.servicemix.bundles</groupId>
       <artifactId>org.apache.servicemix.bundles.cglib</artifactId>
-      <version>2.1_3_6</version>
+      <version>${cglib-bundle-version}</version>
     </dependency>
 
-    <!-- testing -->
+    <!-- test dependencies -->
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>

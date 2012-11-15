@@ -24,7 +24,6 @@ import org.jsmpp.bean.AlertNotification;
 import org.jsmpp.bean.DataSm;
 import org.jsmpp.bean.DeliverSm;
 import org.jsmpp.bean.OptionalParameter;
-import org.jsmpp.extra.ProcessRequestException;
 import org.jsmpp.session.DataSmResult;
 import org.jsmpp.session.SMPPSession;
 import org.jsmpp.util.MessageIDGenerator;
@@ -33,14 +32,11 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.easymock.EasyMock.expect;
-import static org.easymock.EasyMock.expectLastCall;
 import static org.easymock.classextension.EasyMock.createMock;
 import static org.easymock.classextension.EasyMock.replay;
 import static org.easymock.classextension.EasyMock.verify;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.fail;
 
 public class MessageReceiverListenerImplTest {
     
@@ -75,50 +71,13 @@ public class MessageReceiverListenerImplTest {
         expect(endpoint.createOnAcceptAlertNotificationExchange(alertNotification))
             .andReturn(exchange);
         processor.process(exchange);
+        expect(exchange.getException()).andReturn(null);
         
         replay(endpoint, processor, exceptionHandler, alertNotification, exchange);
         
         listener.onAcceptAlertNotification(alertNotification);
         
         verify(endpoint, processor, exceptionHandler, alertNotification, exchange);
-    }
-    
-    @Test
-    public void onAcceptAlertNotificationException() throws Exception {
-        AlertNotification alertNotification = createMock(AlertNotification.class);
-        Exchange exchange = createMock(Exchange.class);
-        Exception exception = new Exception("forced exception for test");
-        
-        expect(endpoint.createOnAcceptAlertNotificationExchange(alertNotification))
-            .andReturn(exchange);
-        processor.process(exchange);
-        expectLastCall().andThrow(exception);
-        exceptionHandler.handleException(exception);
-        
-        replay(endpoint, processor, exceptionHandler, alertNotification, exchange);
-        
-        listener.onAcceptAlertNotification(alertNotification);
-        
-        verify(endpoint, processor, exceptionHandler, alertNotification, exchange);
-    }
-    
-    @Test
-    public void onAcceptDeliverSmSuccess() throws Exception {
-        DeliverSm deliverSm = createMock(DeliverSm.class);
-        Exchange exchange = createMock(Exchange.class);
-        Exception exception = new Exception("forced exception for test");
-        
-        expect(endpoint.createOnAcceptDeliverSmExchange(deliverSm))
-            .andReturn(exchange);
-        processor.process(exchange);
-        expectLastCall().andThrow(exception);
-        exceptionHandler.handleException(exception);
-        
-        replay(endpoint, processor, exceptionHandler, deliverSm, exchange);
-        
-        listener.onAcceptDeliverSm(deliverSm);
-        
-        verify(endpoint, processor, exceptionHandler, deliverSm, exchange);
     }
     
     @Test
@@ -129,36 +88,11 @@ public class MessageReceiverListenerImplTest {
         expect(endpoint.createOnAcceptDeliverSmExchange(deliverSm))
             .andReturn(exchange);
         processor.process(exchange);
-        
+        expect(exchange.getException()).andReturn(null);
+
         replay(endpoint, processor, exceptionHandler, deliverSm, exchange);
         
         listener.onAcceptDeliverSm(deliverSm);
-        
-        verify(endpoint, processor, exceptionHandler, deliverSm, exchange);
-    }
-    
-    @Test
-    public void onAcceptDeliverSmProcessRequestException() throws Exception {
-        DeliverSm deliverSm = createMock(DeliverSm.class);
-        Exchange exchange = createMock(Exchange.class);
-        ProcessRequestException exception = new ProcessRequestException("forced exception for test", 100);
-        
-        expect(endpoint.createOnAcceptDeliverSmExchange(deliverSm))
-            .andReturn(exchange);
-        processor.process(exchange);
-        expectLastCall().andThrow(exception);
-        exceptionHandler.handleException(exception);
-        
-        replay(endpoint, processor, exceptionHandler, deliverSm, exchange);
-        
-        try {
-            listener.onAcceptDeliverSm(deliverSm);
-            fail("ProcessRequestException expected");
-        } catch (ProcessRequestException e) {
-            assertEquals(100, e.getErrorCode());
-            assertEquals("forced exception for test", e.getMessage());
-            assertNull(e.getCause());
-        }
         
         verify(endpoint, processor, exceptionHandler, deliverSm, exchange);
     }
@@ -173,6 +107,7 @@ public class MessageReceiverListenerImplTest {
         expect(endpoint.createOnAcceptDataSm(dataSm, "1"))
             .andReturn(exchange);
         processor.process(exchange);
+        expect(exchange.getException()).andReturn(null);
         expect(dataSm.getOptionalParametes())
             .andReturn(optionalParameters);
         
@@ -186,57 +121,4 @@ public class MessageReceiverListenerImplTest {
         assertSame(optionalParameters, result.getOptionalParameters());
     }
     
-    @Test
-    public void onAcceptDataSmException() throws Exception {
-        SMPPSession session = createMock(SMPPSession.class);
-        DataSm dataSm = createMock(DataSm.class);
-        Exchange exchange = createMock(Exchange.class);
-        Exception exception = new Exception("forced exception for test");
-        
-        expect(endpoint.createOnAcceptDataSm(dataSm, "1"))
-            .andReturn(exchange);
-        processor.process(exchange);
-        expectLastCall().andThrow(exception);
-        exceptionHandler.handleException(exception);
-        
-        replay(endpoint, processor, exceptionHandler, session, dataSm, exchange);
-        
-        try {
-            listener.onAcceptDataSm(dataSm, session);
-            fail("ProcessRequestException expected");
-        } catch (ProcessRequestException e) {
-            assertEquals(255, e.getErrorCode());
-            assertEquals("forced exception for test", e.getMessage());
-            assertSame(exception, e.getCause());
-        }
-        
-        verify(endpoint, processor, exceptionHandler, session, dataSm, exchange);
-    }
-    
-    @Test
-    public void onAcceptDataSmProcessRequestException() throws Exception {
-        SMPPSession session = createMock(SMPPSession.class);
-        DataSm dataSm = createMock(DataSm.class);
-        Exchange exchange = createMock(Exchange.class);
-        ProcessRequestException exception = new ProcessRequestException("forced exception for test", 100);
-        
-        expect(endpoint.createOnAcceptDataSm(dataSm, "1"))
-            .andReturn(exchange);
-        processor.process(exchange);
-        expectLastCall().andThrow(exception);
-        exceptionHandler.handleException(exception);
-        
-        replay(endpoint, processor, exceptionHandler, session, dataSm, exchange);
-        
-        try {
-            listener.onAcceptDataSm(dataSm, session);
-            fail("ProcessRequestException expected");
-        } catch (ProcessRequestException e) {
-            assertEquals(100, e.getErrorCode());
-            assertEquals("forced exception for test", e.getMessage());
-            assertNull(e.getCause());
-        }
-        
-        verify(endpoint, processor, exceptionHandler, session, dataSm, exchange);
-    }
 }
