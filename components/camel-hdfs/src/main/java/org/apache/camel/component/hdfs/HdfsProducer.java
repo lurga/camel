@@ -23,209 +23,272 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.camel.Exchange;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.impl.DefaultProducer;
 import org.apache.camel.util.IOHelper;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 
 public class HdfsProducer extends DefaultProducer {
 
-    private final HdfsConfiguration config;
-    private final StringBuilder hdfsPath;
-    private final AtomicBoolean idle = new AtomicBoolean(false);
-    private volatile ScheduledExecutorService scheduler;
-    private volatile HdfsOutputStream ostream;
-    private long splitNum;
+	private final HdfsConfiguration config;
+	private final StringBuilder hdfsPath;
+	private final AtomicBoolean idle = new AtomicBoolean(false);
+	private volatile ScheduledExecutorService scheduler;
+	private volatile HdfsOutputStream ostream;
+	private long splitNum;
 
-    public static final class SplitStrategy {
-        private SplitStrategyType type;
-        private long value;
+	public static final class SplitStrategy {
+		private SplitStrategyType type;
+		private long value;
 
-        public SplitStrategy(SplitStrategyType type, long value) {
-            this.type = type;
-            this.value = value;
-        }
+		public SplitStrategy(SplitStrategyType type, long value) {
+			this.type = type;
+			this.value = value;
+		}
 
-        public SplitStrategyType getType() {
-            return type;
-        }
+		public SplitStrategyType getType() {
+			return type;
+		}
 
-        public long getValue() {
-            return value;
-        }
-    }
+		public long getValue() {
+			return value;
+		}
+	}
 
-    public enum SplitStrategyType {
-        BYTES {
-            @Override
-            public boolean split(HdfsOutputStream oldOstream, long value, HdfsProducer producer) {
-                return oldOstream.getNumOfWrittenBytes() >= value;
-            }
-        },
+	public enum SplitStrategyType {
+		BYTES {
+			@Override
+			public boolean split(HdfsOutputStream oldOstream, long value,
+					HdfsProducer producer) {
+				return oldOstream.getNumOfWrittenBytes() >= value;
+			}
+		},
 
-        MESSAGES {
-            @Override
-            public boolean split(HdfsOutputStream oldOstream, long value, HdfsProducer producer) {
-                return oldOstream.getNumOfWrittenMessages() >= value;
-            }
-        },
+		MESSAGES {
+			@Override
+			public boolean split(HdfsOutputStream oldOstream, long value,
+					HdfsProducer producer) {
+				return oldOstream.getNumOfWrittenMessages() >= value;
+			}
+		},
 
-        IDLE {
-            @Override
-            public boolean split(HdfsOutputStream oldOstream, long value, HdfsProducer producer) {
-                return producer.idle.get();
-            }
-        };
+		IDLE {
+			@Override
+			public boolean split(HdfsOutputStream oldOstream, long value,
+					HdfsProducer producer) {
+				return producer.idle.get();
+			}
+		};
 
-        public abstract boolean split(HdfsOutputStream oldOstream, long value, HdfsProducer producer);
-    }
+		public abstract boolean split(HdfsOutputStream oldOstream, long value,
+				HdfsProducer producer);
+	}
 
-    public HdfsProducer(HdfsEndpoint endpoint, HdfsConfiguration config) {
-        super(endpoint);
-        this.config = config;
-        this.hdfsPath = config.getFileSystemType().getHdfsPath(config);
-    }
+	public HdfsProducer(HdfsEndpoint endpoint, HdfsConfiguration config) {
+		super(endpoint);
+		this.config = config;
+		this.hdfsPath = config.getFileSystemType().getHdfsPath(config);
+	}
 
-    @Override
-    public HdfsEndpoint getEndpoint() {
-        return (HdfsEndpoint) super.getEndpoint();
-    }
+	@Override
+	public HdfsEndpoint getEndpoint() {
+		return (HdfsEndpoint) super.getEndpoint();
+	}
 
-    @Override
-    protected void doStart() throws Exception {
-        super.doStart();
+	@Override
+	protected void doStart() throws Exception {
+		super.doStart();
 
-        // setup hdfs if configured to do on startup
-        if (getEndpoint().getConfig().isConnectOnStartup()) {
-            ostream = setupHdfs(true);
-        }
+		// setup hdfs if configured to do on startup
+		if (getEndpoint().getConfig().isConnectOnStartup()) {
+			ostream = setupHdfs(true);
+		}
 
-        SplitStrategy idleStrategy = null;
-        for (SplitStrategy strategy : config.getSplitStrategies()) {
-            if (strategy.type == SplitStrategyType.IDLE) {
-                idleStrategy = strategy;
-                break;
-            }
-        }
-        if (idleStrategy != null) {
-            scheduler = getEndpoint().getCamelContext().getExecutorServiceManager().newSingleThreadScheduledExecutor(this, "HdfsIdleCheck");
-            log.debug("Creating IdleCheck task scheduled to run every {} millis", config.getCheckIdleInterval());
-            scheduler.scheduleAtFixedRate(new IdleCheck(idleStrategy), config.getCheckIdleInterval(), config.getCheckIdleInterval(), TimeUnit.MILLISECONDS);
-        }
-    }
+		SplitStrategy idleStrategy = null;
+		for (SplitStrategy strategy : config.getSplitStrategies()) {
+			if (strategy.type == SplitStrategyType.IDLE) {
+				idleStrategy = strategy;
+				break;
+			}
+		}
+		if (idleStrategy != null) {
+			scheduler = getEndpoint().getCamelContext()
+					.getExecutorServiceManager()
+					.newSingleThreadScheduledExecutor(this, "HdfsIdleCheck");
+			log.debug(
+					"Creating IdleCheck task scheduled to run every {} millis",
+					config.getCheckIdleInterval());
+			scheduler.scheduleAtFixedRate(new IdleCheck(idleStrategy),
+					config.getCheckIdleInterval(),
+					config.getCheckIdleInterval(), TimeUnit.MILLISECONDS);
+		}
+	}
 
-    private synchronized HdfsOutputStream setupHdfs(boolean onStartup) throws Exception {
-        if (ostream != null) {
-            return ostream;
-        }
+	private synchronized HdfsOutputStream setupHdfs(boolean onStartup)
+			throws Exception {
+		if (ostream != null) {
+			return ostream;
+		}
 
-        StringBuilder actualPath = new StringBuilder(hdfsPath);
-        if (config.getSplitStrategies().size() > 0) {
-            actualPath = newFileName();
-        }
+		StringBuilder actualPath = new StringBuilder(hdfsPath);
+		if (config.getSplitStrategies().size() > 0) {
+			splitNum = getNextSplitNum();
+			actualPath = newFileName();
+		}
 
-        // if we are starting up then log at info level, and if runtime then log at debug level to not flood the log
-        if (onStartup) {
-            log.info("Connecting to hdfs file-system {}:{}/{} (may take a while if connection is not available)", new Object[]{config.getHostName(), config.getPort(), actualPath.toString()});
-        } else {
-            if (log.isDebugEnabled()) {
-                log.debug("Connecting to hdfs file-system {}:{}/{} (may take a while if connection is not available)", new Object[]{config.getHostName(), config.getPort(), actualPath.toString()});
-            }
-        }
+		// if we are starting up then log at info level, and if runtime then log
+		// at debug level to not flood the log
+		if (onStartup) {
+			log.info(
+					"Connecting to hdfs file-system {}:{}/{} (may take a while if connection is not available)",
+					new Object[] { config.getHostName(), config.getPort(),
+							actualPath.toString() });
+		} else {
+			if (log.isDebugEnabled()) {
+				log.debug(
+						"Connecting to hdfs file-system {}:{}/{} (may take a while if connection is not available)",
+						new Object[] { config.getHostName(), config.getPort(),
+								actualPath.toString() });
+			}
+		}
 
-        HdfsOutputStream answer = HdfsOutputStream.createOutputStream(actualPath.toString(), config);
+		HdfsOutputStream answer = HdfsOutputStream.createOutputStream(
+				actualPath.toString(), config);
 
-        if (onStartup) {
-            log.info("Connected to hdfs file-system {}:{}/{}", new Object[]{config.getHostName(), config.getPort(), actualPath.toString()});
-        } else {
-            if (log.isDebugEnabled()) {
-                log.debug("Connected to hdfs file-system {}:{}/{}", new Object[]{config.getHostName(), config.getPort(), actualPath.toString()});
-            }
-        }
+		if (onStartup) {
+			log.info("Connected to hdfs file-system {}:{}/{}",
+					new Object[] { config.getHostName(), config.getPort(),
+							actualPath.toString() });
+		} else {
+			if (log.isDebugEnabled()) {
+				log.debug("Connected to hdfs file-system {}:{}/{}",
+						new Object[] { config.getHostName(), config.getPort(),
+								actualPath.toString() });
+			}
+		}
 
-        return answer;
-    }
+		return answer;
+	}
 
-    @Override
-    protected void doStop() throws Exception {
-        super.doStop();
-        if (scheduler != null) {
-            getEndpoint().getCamelContext().getExecutorServiceManager().shutdown(scheduler);
-            scheduler = null;
-        }
-        if (ostream != null) {
-            IOHelper.close(ostream, "output stream", log);
-            ostream = null;
-        }
-    }
+	@Override
+	protected void doStop() throws Exception {
+		super.doStop();
+		if (scheduler != null) {
+			getEndpoint().getCamelContext().getExecutorServiceManager()
+					.shutdown(scheduler);
+			scheduler = null;
+		}
+		if (ostream != null) {
+			IOHelper.close(ostream, "output stream", log);
+			ostream = null;
+		}
+	}
 
-    @Override
-    public void process(Exchange exchange) throws Exception {
-        Object body = exchange.getIn().getBody();
-        Object key = exchange.getIn().getHeader(HdfsHeader.KEY.name());
+	@Override
+	public void process(Exchange exchange) throws Exception {
+		Object body = exchange.getIn().getBody();
+		Object key = exchange.getIn().getHeader(HdfsHeader.KEY.name());
 
-        // must have ostream
-        if (ostream == null) {
-            ostream = setupHdfs(false);
-        }
+		// must have ostream
+		if (ostream == null) {
+			ostream = setupHdfs(false);
+		}
 
-        boolean split = false;
-        List<SplitStrategy> strategies = config.getSplitStrategies();
-        for (SplitStrategy splitStrategy : strategies) {
-            split |= splitStrategy.getType().split(ostream, splitStrategy.value, this);
-        }
+		boolean split = false;
+		List<SplitStrategy> strategies = config.getSplitStrategies();
+		for (SplitStrategy splitStrategy : strategies) {
+			split |= splitStrategy.getType().split(ostream,
+					splitStrategy.value, this);
+		}
 
-        if (split) {
-            if (ostream != null) {
-                IOHelper.close(ostream, "output stream", log);
-            }
-            StringBuilder actualPath = newFileName();
-            ostream = HdfsOutputStream.createOutputStream(actualPath.toString(), config);
-        }
+		if (split) {
+			if (ostream != null) {
+				IOHelper.close(ostream, "output stream", log);
+			}
+			StringBuilder actualPath = newFileName();
+			ostream = HdfsOutputStream.createOutputStream(
+					actualPath.toString(), config);
+		}
 
-        ostream.append(key, body, exchange.getContext().getTypeConverter());
-        idle.set(false);
-    }
+		ostream.append(key, body, exchange.getContext().getTypeConverter());
+		idle.set(false);
+	}
 
-    private StringBuilder newFileName() {
-        StringBuilder actualPath = new StringBuilder(hdfsPath);
-        actualPath.append(splitNum);
-        splitNum++;
-        return actualPath;
-    }
+	private long getNextSplitNum() {
+		long maxNumber = -1;
+		try {
+			HdfsInfo info = new HdfsInfo(config.getPath());
+			FileSystem fs = info.getFileSystem();
+			Path dir = new Path(hdfsPath.toString()).getParent();
+			final String prefix = new Path(hdfsPath.toString()).getName();
+			FileStatus[] fileStatusArray = fs.listStatus(dir, new PathFilter() {
+				@Override
+				public boolean accept(Path arg0) {
+					return arg0.getName().startsWith(prefix);
+				}
+			});
+			for (FileStatus fileStatus : fileStatusArray) {
+				if (fs.isFile(fileStatus.getPath())) {
+					String name = fileStatus.getPath().getName();
+					try {
+						long number = Long.valueOf(name.substring(prefix.length()));
+						if (number > maxNumber)
+							maxNumber = number;
+					} catch (NumberFormatException e){
+						// ignore
+					}
+				}
+			}
+			return maxNumber + 1;
+		} catch (IOException e) {
+			throw new RuntimeCamelException(e);
+		}
+	}
 
-    /**
-     * Idle check background task
-     */
-    private final class IdleCheck implements Runnable {
+	private StringBuilder newFileName() {
+		StringBuilder actualPath = new StringBuilder(hdfsPath);
+		actualPath.append(splitNum);
+		splitNum++;
+		return actualPath;
+	}
 
-        private final SplitStrategy strategy;
+	/**
+	 * Idle check background task
+	 */
+	private final class IdleCheck implements Runnable {
 
-        private IdleCheck(SplitStrategy strategy) {
-            this.strategy = strategy;
-        }
+		private final SplitStrategy strategy;
 
-        @Override
-        public void run() {
-            // only run if ostream has been created
-            if (ostream == null) {
-                return;
-            }
+		private IdleCheck(SplitStrategy strategy) {
+			this.strategy = strategy;
+		}
 
-            HdfsProducer.this.log.trace("IdleCheck running");
+		@Override
+		public void run() {
+			// only run if ostream has been created
+			if (ostream == null) {
+				return;
+			}
 
-            if (System.currentTimeMillis() - ostream.getLastAccess() > strategy.value && !idle.get() && !ostream.isBusy().get()) {
-                idle.set(true);
-                try {
-                    ostream.close();
-                } catch (IOException e) {
-                    // ignore
-                }
-            }
-        }
+			HdfsProducer.this.log.trace("IdleCheck running");
 
-        @Override
-        public String toString() {
-            return "IdleCheck";
-        }
-    }
+			if (System.currentTimeMillis() - ostream.getLastAccess() > strategy.value
+					&& !idle.get() && !ostream.isBusy().get()) {
+				idle.set(true);
+				try {
+					ostream.close();
+				} catch (IOException e) {
+					// ignore
+				}
+			}
+		}
+
+		@Override
+		public String toString() {
+			return "IdleCheck";
+		}
+	}
 }
-

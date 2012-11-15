@@ -98,14 +98,20 @@ public class HdfsProducerSplitTest extends CamelTestSupport {
             template.sendBody("direct:start" + routeNr, "CIAO" + i);
         }
         stopCamelContext();
-
+        
+        setUp();
         for (int i = 0; i < 10; ++i) {
+            template.sendBody("direct:start" + routeNr, "CIAO" + i);
+        }
+        stopCamelContext();
+
+        for (int i = 0; i < 20; ++i) {
             InputStream in = null;
             try {
                 in = new URL("file:///" + BASE_FILE.toUri() + routeNr + '/' + HdfsConstants.DEFAULT_SEGMENT_PREFIX + i).openStream();
                 ByteArrayOutputStream bos = new ByteArrayOutputStream();
                 IOUtils.copyBytes(in, bos, 4096, false);
-                Assert.assertEquals("CIAO" + i, new String(bos.toByteArray()));
+                Assert.assertEquals("CIAO" + (i % 10), new String(bos.toByteArray()));
             } finally {
                 IOUtils.closeStream(in);
             }

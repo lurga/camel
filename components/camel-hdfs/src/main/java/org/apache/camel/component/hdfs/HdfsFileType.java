@@ -28,6 +28,9 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.avro.hadoop.io.AvroSequenceFile;
+import org.apache.avro.mapred.AvroKey;
+import org.apache.avro.mapred.AvroValue;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.TypeConverter;
 import org.apache.camel.util.IOHelper;
@@ -230,6 +233,85 @@ public enum HdfsFileType {
             } catch (IOException ex) {
                 throw new RuntimeCamelException(ex);
             }
+        }
+    },
+    
+    AVRO_SEQUENCE_FILE {
+    	private Class<?> keyClass, valueClass;
+    	
+		@SuppressWarnings({ "unchecked", "rawtypes" })
+		@Override
+        public long append(HdfsOutputStream hdfsostr, Object key, Object value, TypeConverter typeConverter) {
+            try {
+            	SequenceFile.Writer writer = (SequenceFile.Writer) hdfsostr.getOut();
+                writer.append(
+                		new AvroKey(typeConverter.convertTo(keyClass, key)), 
+                		new AvroValue(typeConverter.convertTo(valueClass, value)));
+                writer.sync();
+                return 1;
+            } catch (Exception ex) {
+                throw new RuntimeCamelException(ex);
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+		@Override
+        public long next(HdfsInputStream hdfsistr, Holder<Object> key, Holder<Object> value) {
+            try {
+            	SequenceFile.Reader reader = (SequenceFile.Reader) hdfsistr.getIn();
+            	AvroKey<Object> k = new AvroKey<Object>();
+            	k = (AvroKey<Object>) reader.next(k);
+                if (k != null) {
+                	AvroValue<Object> v = new AvroValue<Object>();
+                	v = (AvroValue<Object>) reader.getCurrentValue(v);
+                    key.value = k.datum();
+                    value.value = v.datum();
+                    return 1;
+                } else {
+                    return 0;
+                }
+            } catch (Exception ex) {
+                throw new RuntimeCamelException(ex);
+            }
+        }
+
+        @Override
+        public Closeable createOutputStream(String hdfsPath, HdfsConfiguration configuration) {
+            try {
+                Closeable rout;
+                HdfsInfo hdfsInfo = new HdfsInfo(hdfsPath);
+                AvroSequenceFile.Writer.Options options = new AvroSequenceFile.Writer.Options()
+                	.withFileSystem(hdfsInfo.getFileSystem())
+                	.withOutputPath(hdfsInfo.getPath())
+                	.withConfiguration(hdfsInfo.getConf())
+                	.withCompressionType(configuration.getCompressionType())
+                	.withCompressionCodec(configuration.getCompressionCodec().getCodec())
+                	.withKeySchema(configuration.getKeySchema())
+                	.withValueSchema(configuration.getValueSchema());
+                rout = AvroSequenceFile.createWriter(options);
+                keyClass = configuration.getKeyRecordClass();
+                valueClass = configuration.getValueRecordClass();
+                return rout;
+            } catch (IOException ex) {
+                throw new RuntimeCamelException(ex);
+            }
+        }
+
+        @Override
+        public Closeable createInputStream(String hdfsPath, HdfsConfiguration configuration) {
+            try {
+                Closeable rin;
+                HdfsInfo hdfsInfo = new HdfsInfo(hdfsPath);
+                // Reader works without schema
+                AvroSequenceFile.Reader.Options options = new AvroSequenceFile.Reader.Options()
+                	.withFileSystem(hdfsInfo.getFileSystem())
+                	.withInputPath(hdfsInfo.getPath())
+                	.withConfiguration(hdfsInfo.getConf());
+                rin = new AvroSequenceFile.Reader(options);
+                return rin;
+            } catch (IOException ex) {
+                throw new RuntimeCamelException(ex);
+            } 
         }
     },
 

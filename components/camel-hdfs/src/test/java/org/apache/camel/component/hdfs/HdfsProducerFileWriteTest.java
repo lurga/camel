@@ -23,6 +23,11 @@ import java.net.URL;
 import java.nio.ByteBuffer;
 
 import junit.framework.Assert;
+
+import org.apache.avro.Schema;
+import org.apache.avro.hadoop.io.AvroSequenceFile;
+import org.apache.avro.mapred.AvroKey;
+import org.apache.avro.mapred.AvroValue;
 import org.apache.camel.builder.NotifyBuilder;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.test.junit4.CamelTestSupport;
@@ -49,7 +54,7 @@ public class HdfsProducerFileWriteTest extends CamelTestSupport {
             return;
         }
         super.setUp();
-        deleteDirectory("target/test");
+        //deleteDirectory("target/test");
     }
     
     @Test
@@ -268,8 +273,66 @@ public class HdfsProducerFileWriteTest extends CamelTestSupport {
         }
         Assert.assertEquals(1, i);
     }
+    
+	@SuppressWarnings("unchecked")
+	@Test
+    public void testAvroSequenceKeyWriteFile() throws Exception {
+        if (SKIP) {
+            return;
+        }
 
-    @Override
+        final Path file = new Path(new File("target/test/test-camel-simple-write-file5").getAbsolutePath());
+
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("direct:status")
+                        .to("hdfs:///" + file.toUri() + "?fileSystemType=LOCAL" 
+                        		+ "&keyRecordClass=" + Long.class.getName()
+                        		+ "&valueRecordClass=" + "org.apache.camel.component.hdfs.Event"
+                        		+ "&fileType=AVRO_SEQUENCE_FILE");
+            }
+        });
+
+        context.start();
+
+        NotifyBuilder nb = new NotifyBuilder(context).whenDone(10).create();
+
+        final int max = 10;
+        for (long i = 0; i < max; ++i) {
+        	Event event = new Event();
+    		event.setId(i);
+    		event.setContent("camel");
+            template.sendBodyAndHeader("direct:status", event, "KEY", event.getId());
+        }
+
+        Assert.assertTrue("Timeout waiting for match" + nb.toString(), nb.matchesMockWaitTime());
+        context.stop();
+
+        Configuration conf = new Configuration();
+        Path file1 = new Path("file:///" + file.toUri());
+        FileSystem fs1 = FileSystem.get(file1.toUri(), conf);
+        AvroSequenceFile.Reader.Options options = new AvroSequenceFile.Reader.Options()
+    		.withFileSystem(fs1)
+    		.withInputPath(file1)
+    		.withKeySchema(Schema.create(Schema.Type.LONG))
+    		.withValueSchema(Event.SCHEMA$)
+    		.withConfiguration(conf);
+        
+        AvroSequenceFile.Reader reader = new AvroSequenceFile.Reader(options);
+        AvroKey<Long> k = null;
+        AvroValue<Event> v = null;
+        int i = 0;
+    	while ((k = (AvroKey<Long>) reader.next(k)) != null) {
+    		v = (AvroValue<Event>) reader.getCurrentValue(v);
+    		Assert.assertEquals("camel", v.datum().getContent());
+            Assert.assertEquals(i, k.datum().intValue());
+            i++;
+    	}
+        Assert.assertEquals(max, i);
+    }
+
+	@Override
     public void tearDown() throws Exception {
         if (SKIP) {
             return;

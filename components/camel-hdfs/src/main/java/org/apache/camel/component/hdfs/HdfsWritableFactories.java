@@ -311,5 +311,39 @@ public class HdfsWritableFactories {
             return null;
         }
     }
+    
+    public static final class HdfsAvroKeyFactory implements HdfsWritableFactory {
+
+		@Override
+		public Writable create(Object value, TypeConverter typeConverter, Holder<Integer> size) {
+			InputStream  is = null;
+            try {
+                is = typeConverter.convertTo(InputStream.class, value);
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                IOUtils.copyBytes(is, bos, HdfsConstants.DEFAULT_BUFFERSIZE, false);
+                BytesWritable writable = new BytesWritable();
+                writable.set(bos.toByteArray(), 0, bos.toByteArray().length);
+                size.value = bos.toByteArray().length;
+                return writable;
+            } catch (IOException ex) {
+                throw new RuntimeCamelException(ex);
+            } finally {
+                if (is != null) {
+                    try {
+                        is.close();
+                    } catch (IOException e) {
+                        throw new RuntimeException("Error closing stream", e);
+                    }
+                }
+            }
+		}
+
+		@Override
+		public Object read(Writable writable, Holder<Integer> size) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+    	
+    }
 
 }

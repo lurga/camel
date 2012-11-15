@@ -1,0 +1,14 @@
+{
+  "protocol" : "DocumentProtocol",
+  "namespace" : "org.apache.camel.component.hdfs",
+  "types" : [
+	{
+	  "type": "record", 
+	  "name": "Event",                 
+	  "fields" : [
+	    {"name": "id", "type": "long"}, 
+	    {"name": "content", "type": "string"}  
+	  ]
+	}
+  ]
+}

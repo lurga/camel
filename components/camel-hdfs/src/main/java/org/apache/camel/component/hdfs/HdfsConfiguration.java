@@ -22,6 +22,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.avro.Schema;
+import org.apache.avro.specific.SpecificData;
 import org.apache.camel.util.URISupport;
 import org.apache.hadoop.io.SequenceFile;
 
@@ -42,6 +44,7 @@ public class HdfsConfiguration {
     private HdfsFileSystemType fileSystemType = HdfsFileSystemType.HDFS;
     private HdfsWritableFactories.WritableType keyType = HdfsWritableFactories.WritableType.NULL;
     private HdfsWritableFactories.WritableType valueType = HdfsWritableFactories.WritableType.BYTES;
+    private Class<?> keyRecordClass, valueRecordClass;
     private String openedSuffix = HdfsConstants.DEFAULT_OPENED_SUFFIX;
     private String readSuffix = HdfsConstants.DEFAULT_READ_SUFFIX;
     private long initialDelay;
@@ -113,6 +116,19 @@ public class HdfsConfiguration {
             return dflt;
         }
     }
+
+	private Class<?> getRecordClass(Map<String, Object> hdfsSettings, String param, Class<?> dflt) {
+    	String className = (String) hdfsSettings.get(param);
+    	if (className != null) {
+			try {
+				return Class.forName(className);
+			} catch (ClassNotFoundException e) {
+				throw new IllegalArgumentException(e);
+			}
+    	} else {
+    		return dflt;
+    	}
+	}
 
     private SequenceFile.CompressionType getCompressionType(Map<String, Object> hdfsSettings, String param, SequenceFile.CompressionType ct) {
         String eit = (String) hdfsSettings.get(param);
@@ -201,6 +217,8 @@ public class HdfsConfiguration {
         fileSystemType = getFileSystemType(hdfsSettings, "fileSystemType", fileSystemType);
         keyType = getWritableType(hdfsSettings, "keyType", keyType);
         valueType = getWritableType(hdfsSettings, "valueType", valueType);
+        keyRecordClass = getRecordClass(hdfsSettings, "keyRecordClass", keyRecordClass);
+        valueRecordClass = getRecordClass(hdfsSettings, "valueRecordClass", valueRecordClass);
         openedSuffix = getString(hdfsSettings, "openedSuffix", openedSuffix);
         readSuffix = getString(hdfsSettings, "readSuffix", readSuffix);
         initialDelay = getLong(hdfsSettings, "initialDelay", initialDelay);
@@ -210,7 +228,7 @@ public class HdfsConfiguration {
         splitStrategies = getSplitStrategies(hdfsSettings);
     }
 
-    public URI getUri() {
+	public URI getUri() {
         return uri;
     }
 
@@ -329,8 +347,32 @@ public class HdfsConfiguration {
     public void setValueType(HdfsWritableFactories.WritableType valueType) {
         this.valueType = valueType;
     }
+    
+	public Class<?> getKeyRecordClass() {
+		return keyRecordClass;
+	}
 
-    public void setOpenedSuffix(String openedSuffix) {
+	public void setKeyRecordClass(Class<?> keyRecordClass) {
+		this.keyRecordClass = keyRecordClass;
+	}
+
+	public Class<?> getValueRecordClass() {
+		return valueRecordClass;
+	}
+
+	public void setValueRecordClass(Class<?> valueRecordClass) {
+		this.valueRecordClass = valueRecordClass;
+	}
+
+	public Schema getKeySchema() {
+		return SpecificData.get().getSchema(keyRecordClass);
+	}
+
+	public Schema getValueSchema() {
+		return SpecificData.get().getSchema(valueRecordClass);
+	}
+
+	public void setOpenedSuffix(String openedSuffix) {
         this.openedSuffix = openedSuffix;
     }
 
